@@ -26,7 +26,7 @@ class _HomePageState extends State<HomePage> {
             NavigationDestination(icon: Icon(Icons.home), label: "首頁"),
             NavigationDestination(icon: Icon(Icons.subway), label: "捷運"),
             NavigationDestination(icon: Icon(Icons.public), label: "地圖"),
-            NavigationDestination(icon: Icon(Icons.train), label: "台鐵"),
+            NavigationDestination(icon: Icon(Icons.train), label: "雙鐵"),
             NavigationDestination(icon: Icon(Icons.settings), label: "設定"),
           ],
         ),

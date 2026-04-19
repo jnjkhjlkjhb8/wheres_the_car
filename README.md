@@ -1,6 +1,6 @@
 # bus
 
-A new Flutter project.
+自主學習操死我。
 
 ## Getting Started
 
