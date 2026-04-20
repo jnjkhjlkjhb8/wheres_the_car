@@ -12,14 +12,14 @@ void gettoken(const char *id,const char *secret) {
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
                     "--data 'grant_type=client_credentials&client_id=" + std::string(id) +
-                    "&client_secret="+ std::string(secret) + "' > scripts/token.json";
+                    "&client_secret="+ std::string(secret) + "' > token.json";
     system(s.c_str());
-    std::ifstream f("scripts/token.json");
+    std::ifstream f("token.json");
     nlohmann::json j = nlohmann::json::parse(f);
     token = j["access_token"];
     f.close();
-    remove("scripts/token.json");
-    std::cout << token << '\n';
+    remove("token.json");
+    std::cerr << token << '\n';
 }
 void getcity() {
     for (int i = 0;i < 22;i++) {
@@ -27,9 +27,9 @@ void getcity() {
                         "-H 'authorization: Bearer " + token + "' " +
                         "-H 'Content-Encoding: br,gzip' " +
                         "-H 'Content-Type: application/json' " +
-                        "\'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/" +city[i] +"?$select=RouteUID,RouteID,RouteName,BusRouteType,DepartureStopNameZh,DestinationStopNameZh&$format=JSON\' > scripts/temp.json";
+                        "\'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/" +city[i] +"?$select=RouteUID,RouteID,RouteName,BusRouteType,DepartureStopNameZh,DestinationStopNameZh&$format=JSON\' > temp.json";
         system(s.c_str());
-        std::ifstream f("scripts/temp.json");
+        std::ifstream f("temp.json");
         if (f.good()) {
             nlohmann::json json = nlohmann::json::parse(f);
             if (json.is_array()) {
@@ -53,16 +53,16 @@ void getcity() {
             std::this_thread::sleep_for(std::chrono::seconds(60));
         }
     }
-    remove("scripts/temp.json");
+    remove("temp.json");
 }
 void getinter() {
     std::string s = "curl -X 'GET' "
                     "-H 'authorization: Bearer " + token + "' " +
                     "-H 'Content-Encoding: br,gzip' " +
                     "-H 'Content-Type: application/json' " +
-                    "\'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity?$select=RouteUID,RouteID,RouteName,BusRouteType,DepartureStopNameZh,DestinationStopNameZh&$format=JSON\' > scripts/temp.json";
+                    "\'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/InterCity?$select=RouteUID,RouteID,RouteName,BusRouteType,DepartureStopNameZh,DestinationStopNameZh&$format=JSON\' > temp.json";
     system(s.c_str());
-    std::ifstream f("scripts/temp.json");
+    std::ifstream f("temp.json");
     if (f.good()) {
         if (f.good()) {
             nlohmann::json json = nlohmann::json::parse(f);
@@ -80,7 +80,7 @@ void getinter() {
         }
     }
     f.close();
-    remove("scripts/temp.json");
+    remove("temp.json");
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
