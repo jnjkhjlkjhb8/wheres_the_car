@@ -22,7 +22,6 @@ void gettoken(const char *id,const char *secret) {
     nlohmann::json j = nlohmann::json::parse(f);
     if (j.contains("access_token")) token = j["access_token"];
     f.close();
-    remove("token.json");
     std::cerr << token << '\n';
 }
 void getcity() {
