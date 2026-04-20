@@ -57,7 +57,6 @@ void getcity() {
             std::this_thread::sleep_for(std::chrono::seconds(60));
         }
     }
-    remove("temp.json");
 }
 void getinter() {
     std::string s = "curl -X 'GET' "
