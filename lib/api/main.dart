@@ -1,5 +1,6 @@
 import 'package:bus/data/BusNearByBus.dart';
 import 'package:bus/data/BusNearByStation.dart';
+import 'package:bus/data/BusStationEstimateTime.dart';
 import 'package:bus/data/MetroFirstLastTimetable.dart';
 import 'package:bus/data/MetroLiveBoard.dart';
 import 'package:bus/data/MetroPrice.dart';
@@ -557,6 +558,56 @@ class Tdx{
       if(e.response?.statusCode == 401){
         await getToken();
         return getTRADailyTimetable(OriginStationID, DestinationStationID, TrainDate);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getBusStationEstimateTime(String StationID,String City) async{
+    try{
+      Response response = await _dio.get(
+        "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/City/$City/PassThrough/Station/$StationID",
+        options: Options(
+          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+        ),
+        queryParameters: {
+        '\$format': 'JSON',
+        },
+      );
+      if(response.statusCode == 200){
+        return busN1EstimateTimeFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBusStationEstimateTime(StationID, City);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getInterBusStationEstimateTime(String StationID) async{
+    try{
+      Response response = await _dio.get(
+        "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/InterCity/PassThrough/Station/$StationID",
+        options: Options(
+          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+        ),
+        queryParameters: {
+        '\$format': 'JSON',
+        },
+      );
+      if(response.statusCode == 200){
+        return busN1EstimateTimeFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getInterBusStationEstimateTime(StationID);
       }
       rethrow;
     }
