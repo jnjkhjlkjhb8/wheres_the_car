@@ -21,6 +21,6 @@ jobs:
                 ./supermachine
                 git config --local user.name "github-actions"
                 git config --local user.email "github-actions@users.noreply.github.com"
-                git add scripts/temp.json
+                git add temp.json
                 git commit -m "test" && git push
                # git diff --quiet && git diff --staged --quiet || (git commit -m "自動更新資料庫 $(date +%Y-%m-%d)" && git push)
