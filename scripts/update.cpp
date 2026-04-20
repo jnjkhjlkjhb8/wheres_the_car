@@ -9,6 +9,10 @@ static nlohmann::json total = nlohmann::json().array();
 std::string token;
 std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 void gettoken(const char *id,const char *secret) {
+    if (!id || !secret) {
+        std::cerr << "test" << '\n';
+        return; 
+    }
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
                     "--data 'grant_type=client_credentials&client_id=" + std::string(id) +
@@ -84,7 +88,6 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
-    std::cerr << std::string(id) << " " << std::string(secret) << "\n";
     try {
         gettoken(id, secret);
         getcity();
