@@ -6,13 +6,9 @@
 #include<chrono>
 #include"json.hpp"
 static nlohmann::json total = nlohmann::json().array();
-std::string token;
+std::string token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJER2lKNFE5bFg4WldFajlNNEE2amFVNm9JOGJVQ3RYWGV6OFdZVzh3ZkhrIn0.eyJleHAiOjE3NzY3ODc2OTUsImlhdCI6MTc3NjcwMTI5NSwianRpIjoiYjRkNTcxZjMtMGNhZC00ODA2LWE2OWMtYWZiMGJlNmVmMzdlIiwiaXNzIjoiaHR0cHM6Ly90ZHgudHJhbnNwb3J0ZGF0YS50dy9hdXRoL3JlYWxtcy9URFhDb25uZWN0Iiwic3ViIjoiNWZlNWYxYjEtMTFiZS00NjliLWFlMTItZjkzYTI1ZmU3ZGM3IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiNDExMjExLTIyZGNjMTQ2LTE3ZWQtNDI0ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsic3RhdGlzdGljIiwicHJlbWl1bSIsInBhcmtpbmdGZWUiLCJtYWFzIiwiYWR2YW5jZWQiLCJnZW9pbmZvIiwidmFsaWRhdG9yIiwidG91cmlzbSIsImhpc3RvcmljYWwiLCJjd2EiLCJiYXNpYyJdfSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwidXNlciI6ImY4NmIwYWI5In0.qcGcUKjnT_ml8EFFohtB9oVMm1IQWS8iZqKZOCFIFI3__ouyVIO8xfgRgVSJJJLriXcXrw79GabKfE-agn-rp0bjyt8m0iCxMFZ_7EKDWnfVwOPFehrgdLPDTripB5DmsmF9j_VUbZth5sewxTRPr_mKqFFwWYKQ7Vb0nNwY0A9M6jpVoXXiikbK22ItpInKYeiU28tqxSPv89HFQuCohy8nm2whmRpdIIsI64quWA3rjdBwNxTdf44gYZONra2XXIYdDSVqsenBHhv3qV2B9b9IV81sgUV2p97NYO8I2BCgI7WZhY2wSv_fvtfl6681H_yqX1tJkaIETqDV7yKdPA";
 std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 void gettoken(const char *id,const char *secret) {
-    if (!id || !secret) {
-        std::cerr << "test" << '\n';
-        return;
-    }
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
                     "--data 'grant_type=client_credentials&client_id=" + std::string(id) +
@@ -22,6 +18,7 @@ void gettoken(const char *id,const char *secret) {
     nlohmann::json j = nlohmann::json::parse(f);
     if (j.contains("access_token")) token = j["access_token"];
     f.close();
+    remove("token.json");
     std::cerr << token << '\n';
 }
 void getcity() {
@@ -56,6 +53,7 @@ void getcity() {
             std::this_thread::sleep_for(std::chrono::seconds(60));
         }
     }
+    remove("temp.json");
 }
 void getinter() {
     std::string s = "curl -X 'GET' "
@@ -86,11 +84,8 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
-    if(id == nullptr || secret == nullptr){
-        return 67;
-    }
     try {
-        gettoken(id, secret);
+        //gettoken(id, secret);
         getcity();
         getinter();
         std::ofstream out("routes.json");
