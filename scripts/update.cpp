@@ -6,7 +6,7 @@
 #include<chrono>
 #include"json.hpp"
 static nlohmann::json total = nlohmann::json().array();
-std::string token;
+std::string token = "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJER2lKNFE5bFg4WldFajlNNEE2amFVNm9JOGJVQ3RYWGV6OFdZVzh3ZkhrIn0.eyJleHAiOjE3NzY3ODc2OTUsImlhdCI6MTc3NjcwMTI5NSwianRpIjoiYjRkNTcxZjMtMGNhZC00ODA2LWE2OWMtYWZiMGJlNmVmMzdlIiwiaXNzIjoiaHR0cHM6Ly90ZHgudHJhbnNwb3J0ZGF0YS50dy9hdXRoL3JlYWxtcy9URFhDb25uZWN0Iiwic3ViIjoiNWZlNWYxYjEtMTFiZS00NjliLWFlMTItZjkzYTI1ZmU3ZGM3IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoiNDExMjExLTIyZGNjMTQ2LTE3ZWQtNDI0ZiIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsic3RhdGlzdGljIiwicHJlbWl1bSIsInBhcmtpbmdGZWUiLCJtYWFzIiwiYWR2YW5jZWQiLCJnZW9pbmZvIiwidmFsaWRhdG9yIiwidG91cmlzbSIsImhpc3RvcmljYWwiLCJjd2EiLCJiYXNpYyJdfSwic2NvcGUiOiJwcm9maWxlIGVtYWlsIiwidXNlciI6ImY4NmIwYWI5In0.qcGcUKjnT_ml8EFFohtB9oVMm1IQWS8iZqKZOCFIFI3__ouyVIO8xfgRgVSJJJLriXcXrw79GabKfE-agn-rp0bjyt8m0iCxMFZ_7EKDWnfVwOPFehrgdLPDTripB5DmsmF9j_VUbZth5sewxTRPr_mKqFFwWYKQ7Vb0nNwY0A9M6jpVoXXiikbK22ItpInKYeiU28tqxSPv89HFQuCohy8nm2whmRpdIIsI64quWA3rjdBwNxTdf44gYZONra2XXIYdDSVqsenBHhv3qV2B9b9IV81sgUV2p97NYO8I2BCgI7WZhY2wSv_fvtfl6681H_yqX1tJkaIETqDV7yKdPA";
 std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 void gettoken(const char *id,const char *secret) { // Bug 可能是secrets
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
@@ -83,7 +83,9 @@ void getinter() {
     remove("temp.json");
 }
 int main() {
+    freopen("temp.json","w",stdout);
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
+    std::cout << std::string(id) << ' ' << std::string(secret) << '\n';
     try {
         //gettoken(id, secret);
         getcity();
