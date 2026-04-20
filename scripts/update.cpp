@@ -10,8 +10,8 @@ std::string token;
 std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 void gettoken(const char *id,const char *secret) {
     if (!id || !secret) {
-        std::cout << "test" << '\n';
-        return; 
+        std::cerr << "test" << '\n';
+        return;
     }
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
@@ -20,10 +20,10 @@ void gettoken(const char *id,const char *secret) {
     system(s.c_str());
     std::ifstream f("token.json");
     nlohmann::json j = nlohmann::json::parse(f);
-    token = j["access_token"];
+    if (j.contains("access_token")) token = j["access_token"];
     f.close();
     remove("token.json");
-    std::cout << "Get" << '\n';
+    std::cerr << token << '\n';
 }
 void getcity() {
     for (int i = 0;i < 22;i++) {
