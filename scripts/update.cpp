@@ -84,6 +84,7 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
+    std::cerr << std::string(id) << " " << std::string(secret) << "\n";
     try {
         gettoken(id, secret);
         getcity();
