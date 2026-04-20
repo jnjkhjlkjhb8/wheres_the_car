@@ -86,6 +86,9 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
+    if(id == nullptr || secret == nullptr){
+        return 67;
+    }
     try {
         gettoken(id, secret);
         getcity();
