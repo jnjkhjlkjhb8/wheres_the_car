@@ -5,14 +5,14 @@
 #include<thread>
 #include<chrono>
 #include"json.hpp"
-static nlohmann::json total = nlohmann::json().array();
+static nlohmann::json total = nlohmann::json::array();
+static std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 std::string token;
-std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
 void gettoken(const char *id,const char *secret) {
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
-                    "--data 'grant_type=client_credentials&client_id=" + id +
-                    "&client_secret="+ secret + "' > token.json";
+                    "--data 'grant_type=client_credentials&client_id=" + std::string(id) +
+                    "&client_secret="+ std::string(secret) + "' > token.json";
     system(s.c_str());
     std::ifstream f("token.json");
     nlohmann::json j = nlohmann::json::parse(f);
@@ -83,6 +83,10 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
+    if (secret != nullptr) {
+        std::cout << *secret << "\n" << std::string(secret);
+        return 0;
+    }
     try {
         gettoken(id, secret);
         getcity();
