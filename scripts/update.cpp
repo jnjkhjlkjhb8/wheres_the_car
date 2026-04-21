@@ -41,6 +41,7 @@ void getcity() {
                     temp["Type"] = j["BusRouteType"];
                     temp["DepartureStopNameZh"] = j["DepartureStopNameZh"];
                     temp["DestinationStopNameZh"] = j["DestinationStopNameZh"];
+                    temp["RouteMapImageUrl"] = j["RouteMapImageUrl"];
                     total.emplace_back(temp);
                 }
             }
@@ -74,6 +75,7 @@ void getinter() {
                 temp["Type"] = j["BusRouteType"];
                 temp["DepartureStopNameZh"] = j["DepartureStopNameZh"];
                 temp["DestinationStopNameZh"] = j["DestinationStopNameZh"];
+                temp["RouteMapImageUrl"] = j["RouteMapImageUrl"];
                 total.emplace_back(temp);
             }
         }

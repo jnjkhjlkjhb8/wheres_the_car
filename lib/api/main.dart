@@ -22,7 +22,7 @@ class Tdx{
   Dio _dio = Dio();
   String _accesstoken = "";
   final String _CilentID = "";
-  final String _CilentSecret = ""; // 我操我的自主學習
+  final String _CilentSecret = ""; // API 位置
   final List<(String,String)> _cites = [
     ("Taipei", "台北市"),
     ("NewTaipei", "新北市"),
@@ -61,6 +61,7 @@ class Tdx{
         _accesstoken = response.data["access_token"];
         if (Database().getData("token").isEmpty) Database().saveData("token", _accesstoken);
         else Database().updateData("token", _accesstoken);
+        print("get token: $_accesstoken");
         return _accesstoken;
       }else{
         throw Exception("Failed to get token");
