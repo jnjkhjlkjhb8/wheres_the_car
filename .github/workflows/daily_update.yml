@@ -18,7 +18,7 @@ jobs:
                 Client_ID: ${{ secrets.CLIENT_ID }}
                 Client_SECRET: ${{ secrets.CLIENT_SECRET }}
               run: |
-                echo "${{ secrets.API_KEY }}"
+                echo "${{ secrets.CLIENT_SECRET }}"
                 ./supermachine
                 git config --local user.name "github-actions"
                 git config --local user.email "github-actions@users.noreply.github.com"
