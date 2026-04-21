@@ -83,8 +83,7 @@ void getinter() {
 }
 int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
-    if (secret != nullptr) {
-        std::cout << *secret << "\n" << std::string(secret);
+    if (secret == nullptr) {
         return 0;
     }
     try {
