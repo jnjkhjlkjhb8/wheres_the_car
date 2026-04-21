@@ -8,18 +8,17 @@
 static nlohmann::json total = nlohmann::json().array();
 std::string token;
 std::vector<std::string> city = {"Taipei","NewTaipei","Taoyuan","Taichung","Tainan","Kaohsiung","Keelung","Hsinchu", "HsinchuCounty","MiaoliCounty","ChanghuaCounty","NantouCounty","YunlinCounty","ChiayiCounty","Chiayi","PingtungCounty","YilanCounty","HualienCounty","TaitungCounty","KinmenCounty","PenghuCounty","LienchiangCounty"};
-void gettoken(const char *id,const char *secret) { // Bug 可能是secrets
+void gettoken(const char *id,const char *secret) {
     std::string s = "curl --request POST https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token "
                     "--header 'content-type: application/x-www-form-urlencoded' "
-                    "--data 'grant_type=client_credentials&client_id=" + std::string(id) +
-                    "&client_secret="+ std::string(secret) + "' > token.json";
+                    "--data 'grant_type=client_credentials&client_id=" + id +
+                    "&client_secret="+ secret + "' > token.json";
     system(s.c_str());
     std::ifstream f("token.json");
     nlohmann::json j = nlohmann::json::parse(f);
     if (j.contains("access_token")) token = j["access_token"];
     f.close();
     remove("token.json");
-    std::cerr << token << '\n';
 }
 void getcity() {
     for (int i = 0;i < 22;i++) {
