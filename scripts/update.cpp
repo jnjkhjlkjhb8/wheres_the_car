@@ -85,7 +85,7 @@ int main() {
     const char *id = getenv("Client_ID"),*secret = getenv("Client_SECRET");
     try {
         gettoken(id, secret);
-        getcity();
+        //getcity();
         getinter();
         std::ofstream out("routes.json");
         out << total.dump();
