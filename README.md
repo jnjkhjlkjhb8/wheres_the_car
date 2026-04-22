@@ -16,3 +16,7 @@
 
 API from TDX (大略) --week1
 Daily Update Routes --week1
+
+## Bug
+
+國道客運分支路線無法顯示 Ex: 9023(9023A)
