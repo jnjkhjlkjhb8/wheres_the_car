@@ -1,9 +1,11 @@
 import 'package:bus/data/DailyRoute.dart';
 import 'package:flutter/material.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../utility/Favorite.dart';
+import '../api/main.dart';
 import '../utility/update_route.dart';
+import 'package:collection/collection.dart';
+import '../data/BusEstimateTime.dart';
 
 final Map<String, String> _cites = {
     "Taipei": "台北市",
@@ -27,7 +29,8 @@ final Map<String, String> _cites = {
     "TaitungCounty": "台東縣",
     "KinmenCounty": "金門縣",
     "PenghuCounty": "澎湖縣",
-    "LienchiangCounty": "連江縣"
+    "LienchiangCounty": "連江縣",
+    "InterCity": "公路客運"
 };
 class HomePage extends StatefulWidget{
   const HomePage({super.key});
@@ -166,24 +169,31 @@ class _HomePageState extends State<HomePage> {
                       subtitle: Text("${route.DepartureStopNameZh} ⇌ ${route.DestinationStopNameZh}"),
                       trailing: (
                         IconButton(
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          onPressed: () async {
+                          icon: Icon(Icons.delete,color: Colors.red[400]),
+                          onPressed: (){
                             showDialog(
                               context: context,
                               builder: (context) => AlertDialog(
                                 title: Text("確定要刪除這項紀錄嗎？",style: TextStyle(fontWeight: FontWeight.bold)),
-                                content: Text.rich(
-                                  TextSpan(
-                                    text: route.RouteName,
-                                    style: TextStyle(fontWeight: FontWeight.bold),
-                                    children: [
-                                      WidgetSpan(child: const SizedBox(width: 5)),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text.rich(
                                       TextSpan(
-                                        text: _cites[route.City],
-                                        style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
+                                        text: route.RouteName,
+                                        style: TextStyle(fontWeight: FontWeight.bold,fontSize: 20),
+                                        children: [
+                                          WidgetSpan(child: const SizedBox(width: 5)),
+                                          TextSpan(
+                                            text: _cites[route.City],
+                                            style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    Text("${route.DepartureStopNameZh} ⇌ ${route.DestinationStopNameZh}"),
+                                  ],
                                 ),
                                 actions: [
                                   FilledButton.tonal(
@@ -194,6 +204,9 @@ class _HomePageState extends State<HomePage> {
                                     onPressed: () async {
                                       await recent().del(route.RouteUID);
                                       setState(() {});
+                                      String temp = controller.text;
+                                      controller.text = controller.text+" ";
+                                      controller.text = temp;
                                       Navigator.pop(context);
                                     },
                                     child: Text("確定"),
@@ -201,18 +214,20 @@ class _HomePageState extends State<HomePage> {
                                 ],
                               ),
                             );
-                            setState(() {});
-                          }
+                          },
                         )
                       ),
                       onTap: () {
                         controller.text = route.RouteName;
-                        controller.closeView(null);
                         recent().add(route.RouteUID);
-                        setState(() {}); // 
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BusPage(route: route)
+                          )
+                        );
                       },
                     )).toList();
-                    
                   }
                   final foundRoutes = allRoutes.where((route) => route.RouteName.contains(input)).toList();
                   if (foundRoutes.isEmpty) return [const ListTile(title: Text("沒有找到相關路線"))];
@@ -222,31 +237,23 @@ class _HomePageState extends State<HomePage> {
                   city.forEach((cityKey, routes) {
                     Display.add(
                       Padding(
-                        padding: const EdgeInsets.all(25),
-                        child: Text(_cites[cityKey] ?? '',style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorscheme.primary),),
-                      )
+                        padding: const EdgeInsets.all(15),
+                        child: Text(_cites[cityKey]!,style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorscheme.primary)),
+                      ),
                     );
                     Display.addAll(
                       routes.map((route) => ListTile(
-                        title: Text.rich(
-                          TextSpan(
-                            text: route.RouteName,
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                            children: [
-                              WidgetSpan(child: const SizedBox(width: 5)),
-                              TextSpan(
-                                text: _cites[route.City],
-                                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
-                              ),
-                            ],
-                          ),
-                        ),
+                        title: Text(route.RouteName,style: TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text("${route.DepartureStopNameZh} ⇌ ${route.DestinationStopNameZh}"),
                         onTap: () {
                           controller.text = route.RouteName;
-                          controller.closeView(null);
                           recent().add(route.RouteUID);
-                          setState(() {});
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BusPage(route: route)
+                            )
+                          );
                         },
                       )).toList()
                     );
@@ -258,5 +265,144 @@ class _HomePageState extends State<HomePage> {
           ]
         )
       );
+  }
+}
+class BusPage extends StatefulWidget{
+  final Routes route;
+  const BusPage({super.key, required this.route});
+  @override
+  State<BusPage> createState() => _BusPageState();
+}
+class _BusPageState extends State<BusPage> {
+  ColorScheme get colorscheme => Theme.of(context).colorScheme;
+  Widget buildlisttile(BusEstimates stop, dynamic colorsceme,bool first,bool last){
+    int? EstimateTime = stop.EstimateTime;
+    int status = stop.StopStatus;
+    Color color;
+    dynamic text;
+    bool bus = stop.PlateNumb.isNotEmpty;
+    if (status == 3){
+      text = Text("末班車已過",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      color = Colors.grey;
+    }
+    else if (EstimateTime == null){
+      text = Text("資料不可用",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      color = Colors.grey;
+    }
+    else if (EstimateTime <= 60){
+      text = Text("進站中",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      color = Colors.red;
+    }
+    else if (EstimateTime <= 120){
+      text = Text("即將進站",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      color = colorsceme.primary;
+    }
+    else{
+      text = RichText(
+        text: TextSpan(
+          text: "${EstimateTime/60})",
+          children: [
+            WidgetSpan(child: const SizedBox(width: 5)),
+            TextSpan(
+              text: "分",
+              style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
+              ),
+          ],
+        )
+      );
+      color = colorscheme.secondary;
+    }
+    return ListTile(
+      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      leading: Container(
+        width: 75,
+        height: 30,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6.7),
+          border: Border.all(color: color, width: 1.67),
+        ),
+        alignment: Alignment.center,
+        child: text
+      ),
+      title: Text(stop.StopName["Zh_tw"]!,style: TextStyle(fontWeight: FontWeight.bold)),
+      trailing: SizedBox(
+        width: 30,
+        height: double.infinity,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              top: first ? 10 : 0,
+              bottom: last ? 10 : 0,
+              child: Container(
+                width: 10,
+                decoration: BoxDecoration(
+                  color: bus ? Colors.grey : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            bus ? Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: colorscheme.primary,
+                  shape: BoxShape.circle,
+                ),
+              )  
+            : Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
+        )
+      ),
+    );
+  }
+  @override
+  Widget build(BuildContext context){
+    return FutureBuilder<List<dynamic>>(
+      future: widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteID),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        var group = groupBy(snapshot.data as List<dynamic>, (e) => e.Direction);
+        List<dynamic> outbound = group[0] ?? [];
+        List<dynamic> inbound = group[1] ?? [];
+        outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
+        inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
+        int tabcount = inbound.isEmpty ? 0 : 1 + (outbound.isEmpty ? 0 : 1);
+        return DefaultTabController(
+          length: tabcount,
+          child: Scaffold(
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text(widget.route.RouteName, style: TextStyle(fontWeight: FontWeight.bold)),
+              bottom: TabBar(
+                tabs: <Widget> [
+                  Tab(text: "往 ${outbound.last.StopName["Zh_tw"]}"),
+                  Tab(text: "往 ${inbound.last.StopName["Zh_tw"]}"),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                if (inbound.isNotEmpty) ListView.builder(
+                  itemCount: inbound.length,
+                  itemBuilder: (context, index) => buildlisttile(inbound[index], colorscheme, index == 0, index == inbound.length - 1),
+                ),
+                if (outbound.isNotEmpty) ListView.builder(
+                  itemCount: outbound.length,
+                  itemBuilder: (context, index) => buildlisttile(outbound[index], colorscheme, index == 0, index == outbound.length - 1),
+                ),
+              ]
+            ),
+          )
+        );
+      }
+    );
   }
 }
