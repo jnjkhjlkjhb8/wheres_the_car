@@ -45,4 +45,3 @@ app.*.map.json
 /android/app/release
 temp.json
 temp1.json
-lib/api/test.dart
