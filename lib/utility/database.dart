@@ -4,10 +4,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 class Database{
   List past = [];
   final _myBox = Hive.box("mybox");
+  Database(){
+    Hive.openBox("myBox");
+  }
   void saveData(String index,String temp){
     _myBox.put(index,temp);
   }
-  String getData(String index){
+  String? getData(String index){
     return _myBox.get(index);
   }
   void deleteData(String index){

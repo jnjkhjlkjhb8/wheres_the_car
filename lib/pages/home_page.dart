@@ -6,7 +6,8 @@ import '../api/main.dart';
 import '../utility/update_route.dart';
 import 'package:collection/collection.dart';
 import '../data/BusEstimateTime.dart';
-
+import 'package:intl/intl.dart';
+import '../api/test.dart';
 final Map<String, String> _cites = {
     "Taipei": "台北市",
     "NewTaipei": "新北市",
@@ -277,30 +278,42 @@ class _BusPageState extends State<BusPage> {
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
   Widget buildlisttile(BusEstimates stop, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = stop.EstimateTime;
-    int status = stop.StopStatus;
+    int? status = stop.StopStatus;
     Color color;
     dynamic text;
-    bool bus = stop.PlateNumb.isNotEmpty;
     if (status == 3){
-      text = Text("末班車已過",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      text = Text("末班車已過",style: TextStyle(fontSize: 13,fontWeight: FontWeight.bold));
       color = Colors.grey;
     }
-    else if (EstimateTime == null){
-      text = Text("資料不可用",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+    else if (status == 2){
+      text = Text("交管不停靠",style: TextStyle(fontSize: 13));
+      color = Colors.grey;
+    }
+    else if (status == 1){
+      text = Text(DateFormat("HH:mm").format(stop.NextBusTime?.toLocal() ?? DateTime.now()),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold));
+      color = Colors.grey;
+    }
+    else if (status == 4){
+      text = Text("今日未營運",style: TextStyle(fontSize: 13));
+      color = Colors.grey;
+    }
+    else if (status == 255 || EstimateTime == null){
+      text = Text("資料不可用",style: TextStyle(fontSize: 13));
       color = Colors.grey;
     }
     else if (EstimateTime <= 60){
-      text = Text("進站中",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      text = Text("進站中",style: TextStyle(fontSize: 15,fontWeight: FontWeight.bold));
       color = Colors.red;
     }
     else if (EstimateTime <= 120){
-      text = Text("即將進站",style: TextStyle(fontSize: 12,fontWeight: FontWeight.bold));
+      text = Text("即將進站",style: TextStyle(fontSize: 15,fontWeight: FontWeight.bold));
       color = colorsceme.primary;
     }
     else{
       text = RichText(
         text: TextSpan(
-          text: "${EstimateTime/60})",
+          text: "${(EstimateTime/60).floor()}",
+          style: TextStyle(fontSize: 20,fontWeight: FontWeight.bold,color: Colors.black),
           children: [
             WidgetSpan(child: const SizedBox(width: 5)),
             TextSpan(
@@ -313,7 +326,7 @@ class _BusPageState extends State<BusPage> {
       color = colorscheme.secondary;
     }
     return ListTile(
-      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 0),
       leading: Container(
         width: 75,
         height: 30,
@@ -324,54 +337,60 @@ class _BusPageState extends State<BusPage> {
         alignment: Alignment.center,
         child: text
       ),
-      title: Text(stop.StopName["Zh_tw"]!,style: TextStyle(fontWeight: FontWeight.bold)),
-      trailing: SizedBox(
-        width: 30,
-        height: double.infinity,
+      title: Text(stop.StopName?["Zh_tw"] ?? "",style: TextStyle(fontWeight: FontWeight.bold)),
+      trailing: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0,vertical: 0),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned(
-              top: first ? 10 : 0,
-              bottom: last ? 10 : 0,
-              child: Container(
-                width: 10,
+              Container(
+                width: 16,
                 decoration: BoxDecoration(
-                  color: bus ? Colors.grey : Colors.transparent,
-                  shape: BoxShape.circle,
+                  color: color,
+                  borderRadius: BorderRadius.vertical(top: first?Radius.circular(100): Radius.zero, bottom: last ? Radius.circular(100) : Radius.zero)
                 ),
-              ),
             ),
-            bus ? Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: colorscheme.primary,
-                  shape: BoxShape.circle,
-                ),
-              )  
-            : Container(
+            Container(
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-              ),
+              )  
           ],
         )
       ),
     );
   }
+  //late Future<List<BusEstimates>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteID);
+  late Future<List<BusEstimates>> estimates = loadBusEstimates();
   @override
   Widget build(BuildContext context){
     return FutureBuilder<List<dynamic>>(
-      future: widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteID),
+      future: estimates,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
+            ),
+            body: Center(child: Text("發生錯誤, ${snapshot.error}",style: const TextStyle(fontWeight: FontWeight.bold))),
+          );
+        }
+        if (!snapshot.hasData){
+          return Scaffold(
+            appBar: AppBar(
+              centerTitle: true,
+              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
         var group = groupBy(snapshot.data as List<dynamic>, (e) => e.Direction);
-        List<dynamic> outbound = group[0] ?? [];
-        List<dynamic> inbound = group[1] ?? [];
+        List<dynamic> outbound = group[1] ?? [];
+        List<dynamic> inbound = group[0] ?? [];
         outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         int tabcount = inbound.isEmpty ? 0 : 1 + (outbound.isEmpty ? 0 : 1);
@@ -380,11 +399,11 @@ class _BusPageState extends State<BusPage> {
           child: Scaffold(
             appBar: AppBar(
               centerTitle: true,
-              title: Text(widget.route.RouteName, style: TextStyle(fontWeight: FontWeight.bold)),
+              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
               bottom: TabBar(
                 tabs: <Widget> [
-                  Tab(text: "往 ${outbound.last.StopName["Zh_tw"]}"),
-                  Tab(text: "往 ${inbound.last.StopName["Zh_tw"]}"),
+                  Tab(text: "往 ${widget.route.DestinationStopNameZh}"),
+                  Tab(text: "往 ${widget.route.DepartureStopNameZh}"),
                 ],
               ),
             ),

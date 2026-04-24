@@ -11,6 +11,7 @@ import 'package:bus/data/TRADailyTimetable.dart';
 import 'package:bus/data/TRADailyTimetableTrain.dart';
 import 'package:bus/data/TRAODFare.dart';
 import 'package:dio/dio.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '../data/BusStopOfRoute.dart';
 import '../utility/database.dart';
 import '../data/BusEstimateTime.dart';
@@ -19,9 +20,13 @@ import '../data/BusShape.dart';
 import '../data/BusRoute.dart';
 
 class Tdx{
-  Dio _dio = Dio();
-  String _accesstoken = "";
+  Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
+  Database _db = Database();
+  late String _accesstoken;
   final String _CilentID = "";
+  Tdx(){
+    _accesstoken = _db.getData("token") ?? "";
+  }
   final String _CilentSecret = ""; // API 位置
   final List<(String,String)> _cites = [
     ("Taipei", "台北市"),
@@ -56,10 +61,15 @@ class Tdx{
           "client_id": _CilentID,
           "client_secret": _CilentSecret,
         },
+        options: Options(
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        ),
       );
       if(response.statusCode == 200){
         _accesstoken = response.data["access_token"];
-        if (Database().getData("token").isEmpty) Database().saveData("token", _accesstoken);
+        if (Database().getData("token") == null) Database().saveData("token", _accesstoken);
         else Database().updateData("token", _accesstoken);
         print("get token: $_accesstoken");
         return _accesstoken;
@@ -96,9 +106,18 @@ class Tdx{
   Future<List<BusEstimates>> getBusEstimatedTimeOfArrival(String city,String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/$city/$route?\$format=JSON",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/$city",
+        queryParameters: {
+          '\$select': "PlateNumb,StopUID,StopID,StopName,RouteUID,RouteID,RouteName,SubRouteUID,SubRouteID,SubRouteName,Direction,EstimateTime,ScheduledTime,CurrentStop,DestinationStop,StopSequence,StopStatus,MessageType,NextBusTime,IsLastBus,Estimates,UpdateTime",
+          '\$filter': "RouteID eq '$route'",
+          '\$format': 'JSON',
+        },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip" ,
+            "Accept": "application/json",
+          },
         )
       );
       if(response.statusCode == 200){
@@ -247,12 +266,20 @@ class Tdx{
       rethrow;
     }
   }
-  Future<List<BusEstimates>> getInterBusEstimatedTimeOfArrival(String city,String route) async{
+  Future<List<BusEstimates>> getInterBusEstimatedTimeOfArrival(String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity/$city/$route?\$format=JSON",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity",
+        queryParameters: {
+          '\$filter': "RouteID eq '$route'",
+          '\$format': 'JSON',
+        },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip",
+            "Accept": "application/json",
+          },
         )
       );
       if(response.statusCode == 200){
@@ -264,7 +291,7 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getInterBusEstimatedTimeOfArrival(city, route);
+        return getInterBusEstimatedTimeOfArrival(route);
       }
       rethrow;
     }
