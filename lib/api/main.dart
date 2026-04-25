@@ -24,10 +24,10 @@ class Tdx{
   Database _db = Database();
   late String _accesstoken;
   final String _CilentID = "";
+  final String _CilentSecret = ""; // API 位置
   Tdx(){
     _accesstoken = _db.getData("token") ?? "";
   }
-  final String _CilentSecret = ""; // API 位置
   final List<(String,String)> _cites = [
     ("Taipei", "台北市"),
     ("NewTaipei", "新北市"),
@@ -84,13 +84,22 @@ class Tdx{
   Future<List<BusStopOfRoute>> getBusStopOfRoute(String city,String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/$city/$route?\$format=JSON",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/$city/$route",
+        queryParameters: {
+          '\$select': "RouteUID,RouteName,SubRouteUID,SubRouteName,Direction,Stops,UpdateTime",
+          '\$filter': "RouteUID eq '$route'",
+          '\$format': 'JSON',
+        },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip" ,
+            "Accept": "application/json",
+          },
         )
       );
       if(response.statusCode == 200){
-        return BusStopOfRouteFromJson(response.data);
+        return busStopOfRouteFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }
@@ -109,7 +118,7 @@ class Tdx{
         "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/City/$city",
         queryParameters: {
           '\$select': "PlateNumb,StopUID,StopID,StopName,RouteUID,RouteID,RouteName,SubRouteUID,SubRouteID,SubRouteName,Direction,EstimateTime,ScheduledTime,CurrentStop,DestinationStop,StopSequence,StopStatus,MessageType,NextBusTime,IsLastBus,Estimates,UpdateTime",
-          '\$filter': "RouteID eq '$route'",
+          '\$filter': "RouteUID eq '$route'",
           '\$format': 'JSON',
         },
         options: Options(
@@ -244,16 +253,25 @@ class Tdx{
       rethrow;
     }
   }
-  Future<List<BusStopOfRoute>> getInterBusStopOfRoute(String city,String route) async{
+  Future<List<BusStopOfRoute>> getInterBusStopOfRoute(String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity/$city/$route?\$format=JSON",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity",
+        queryParameters: {
+          '\$select': "RouteUID,RouteName,SubRouteUID,SubRouteName,Direction,Stops,UpdateTime",
+          '\$filter': "RouteUID eq '$route'",
+          '\$format': 'JSON',
+        },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip" ,
+            "Accept": "application/json",
+          },
         )
       );
       if(response.statusCode == 200){
-        return BusStopOfRouteFromJson(response.data);
+        return busStopOfRouteFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }
@@ -261,7 +279,7 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getInterBusStopOfRoute(city, route);
+        return getInterBusStopOfRoute(route);
       }
       rethrow;
     }

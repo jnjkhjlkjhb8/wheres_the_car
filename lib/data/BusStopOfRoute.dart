@@ -13,7 +13,7 @@ class BusStop{
   final int StopSequence;
   final double? PositionLon,PositionLat;
   final String? GeoHash;
-  final String? StationID;
+  final String StationID;
   final String? StationGroupID;
   final String? LocationCityCode;
   BusStop(

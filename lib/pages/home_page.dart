@@ -5,7 +5,6 @@ import '../utility/Favorite.dart';
 import '../api/main.dart';
 import '../utility/update_route.dart';
 import 'package:collection/collection.dart';
-import '../data/BusEstimateTime.dart';
 import 'package:intl/intl.dart';
 import '../api/test.dart';
 final Map<String, String> _cites = {
@@ -44,8 +43,8 @@ class _HomePageState extends State<HomePage> {
   final SearchController _searchController = SearchController();
   final List<String> Greeting = [
     "Ciallo～(∠・ω< )⌒☆",
-    "test",
-    "test2",
+    "哈基米豆南北路豆",
+    "你是小男娘",
   ];
   List<AnimatedText> get animatedTexts {
     final hour = DateTime.now().hour;
@@ -276,7 +275,7 @@ class BusPage extends StatefulWidget{
 }
 class _BusPageState extends State<BusPage> {
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
-  Widget buildlisttile(BusEstimates stop, dynamic colorsceme,bool first,bool last){
+  Widget buildlisttile(dynamic stop, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = stop.EstimateTime;
     int? status = stop.StopStatus;
     Color color;
@@ -301,7 +300,7 @@ class _BusPageState extends State<BusPage> {
       text = Text("資料不可用",style: TextStyle(fontSize: 13));
       color = Colors.grey;
     }
-    else if (EstimateTime <= 60){
+    else if (EstimateTime < 60){
       text = Text("進站中",style: TextStyle(fontSize: 15,fontWeight: FontWeight.bold));
       color = Colors.red.shade900;
     }
@@ -363,8 +362,9 @@ class _BusPageState extends State<BusPage> {
       ),
     );
   }
-  //late Future<List<BusEstimates>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
-  late Future<List<BusEstimates>> estimates = loadBusEstimates();
+  late Future<List<dynamic>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
+  //late Future<List<dynamic>> StopOfRoute = widget.route.City == "InterCity" ? Tdx().getInterBusStopOfRoute(widget.route.RouteUID) : Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
+  //late Future<List<dynamic>> estimates = loadBusEstimates();
   @override
   Widget build(BuildContext context){
     return FutureBuilder<List<dynamic>>(
@@ -389,6 +389,7 @@ class _BusPageState extends State<BusPage> {
           );
         }
         var group = groupBy(snapshot.data as List<dynamic>, (e) => e.Direction);
+        var group2 = groupBy(loadBusStopOfRoute(widget.route.RouteUID) as List<dynamic>, (e) => e.Direction);
         List<dynamic> outbound = group[1] ?? [];
         List<dynamic> inbound = group[0] ?? [];
         outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));

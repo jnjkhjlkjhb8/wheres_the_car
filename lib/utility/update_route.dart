@@ -8,6 +8,7 @@ List<Routes> allRoutes = [];
 class UpdateRoute{
   final Dio _dio = Dio(
     BaseOptions(
+      baseUrl: "https://raw.githubusercontent.com/jnjkhjlkjhb8/bus/refs/heads/main/routes.json",
       connectTimeout: Duration(seconds: 10),
       receiveTimeout: Duration(seconds: 10),
     ),
@@ -20,7 +21,7 @@ class UpdateRoute{
     final String? lastFetchTime = db.getData('lastFetchTime');
     if (cachedData == null || lastFetchTime != today) {
       try {
-        final response = await _dio.get("https://raw.githubusercontent.com/jnjkhjlkjhb8/bus/refs/heads/main/routes.json?token=GHSAT0AAAAAADRRESMW2S7MJHLTWOTK56MQ2PLFENA");
+        final response = await _dio.get("?token=GHSAT0AAAAAADRRESMW7PPWFICW3W3MIUB22PMMC5A");
         if (response.statusCode == 200) {
           String string = (response.data is String) ? response.data : jsonEncode(response.data);
           db.saveData('cachedRoutes', string);
