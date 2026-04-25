@@ -19,7 +19,7 @@
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
-              android:value="{apiKey}"
+              android:value="@string/google_maps_api_key"
               />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -48,3 +48,4 @@ temp1.json
 android/app/src/main/AndroidManifest.xml
 ios/Runner/AppDelegate.swift
 token.env
+.vscode/launch.json

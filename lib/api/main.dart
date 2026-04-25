@@ -23,8 +23,8 @@ class Tdx{
   Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
   Database _db = Database();
   late String _accesstoken;
-  final String _CilentID = "";
-  final String _CilentSecret = ""; // API 位置
+  final String _CilentID = String.fromEnvironment("TDX_CLIENT_ID"); // API 位置
+  final String _CilentSecret = String.fromEnvironment("TDX_CLIENT_SECRET"); // API 位置
   Tdx(){
     _accesstoken = _db.getData("token") ?? "";
   }

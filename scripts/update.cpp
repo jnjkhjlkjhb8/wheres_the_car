@@ -29,11 +29,11 @@ void getcity() {
                         "-H 'Content-Type: application/json' " +
                         "\'https://tdx.transportdata.tw/api/basic/v2/Bus/Route/City/" +city[i] +"?$select=RouteUID,RouteID,RouteName,BusRouteType,DepartureStopNameZh,DestinationStopNameZh&$format=JSON\' > temp.json";
         system(s.c_str());
-        std::set<std::string> s;
         std::ifstream f("temp.json");
         if (f.good()) {
             nlohmann::json json = nlohmann::json::parse(f);
             if (json.is_array()) {
+                std::set<std::string> set;
                 for (auto &j : json) {
                     nlohmann::json temp;
                     temp["RouteUID"] = j["RouteUID"];
@@ -43,16 +43,16 @@ void getcity() {
                     temp["DepartureStopNameZh"] = j["DepartureStopNameZh"];
                     temp["DestinationStopNameZh"] = j["DestinationStopNameZh"];
                     if(j.contains("HasSubRoutes")){
-                        nlohmann::json temp["SubRoutes"] = nlohmann::json::array();
+                        temp["SubRoutes"] = nlohmann::json::array();
                         for (auto &k : j["SubRoutes"]) {
-                            if(s.count(k["SubRouteUID"].get<std::string>())) continue;
+                            if(set.count(k["SubRouteUID"].get<std::string>())) continue;
                             nlohmann::json temp2;
                             temp2["SubRouteUID"] = k["SubRouteUID"];
                             temp2["SubRouteName"] = k["SubRouteName"]["Zh_tw"];
                             if(k.contains("DepartureStopNameZh")) temp2["DepartureStopNameZh"] = k["DepartureStopNameZh"];
                             if(k.contains("DestinationStopNameZh")) temp2["DestinationStopNameZh"] = k["DestinationStopNameZh"];
                             temp["SubRoutes"].emplace_back(temp2);
-                            s.emplace(k["SubRouteUID"].get<std::string>());
+                            set.emplace(k["SubRouteUID"].get<std::string>());
                         }
                     }
                     total.emplace_back(temp);
@@ -78,6 +78,7 @@ void getinter() {
     std::ifstream f("temp.json");
     if (f.good()) {
         if (f.good()) {
+            std::set<std::string> set;
             nlohmann::json json = nlohmann::json::parse(f);
             for (auto &j : json) {
                 nlohmann::json temp;
@@ -88,16 +89,16 @@ void getinter() {
                 temp["DepartureStopNameZh"] = j["DepartureStopNameZh"];
                 temp["DestinationStopNameZh"] = j["DestinationStopNameZh"];
                 if(j.contains("HasSubRoutes")){
-                    nlohmann::json temp["SubRoutes"] = nlohmann::json::array();
+                    temp["SubRoutes"] = nlohmann::json::array();
                         for (auto &k : j["SubRoutes"]) {
-                        if(s.count(k["SubRouteUID"].get<std::string>())) continue;
+                        if(set.count(k["SubRouteUID"].get<std::string>())) continue;
                         nlohmann::json temp2;
                         temp2["SubRouteUID"] = k["SubRouteUID"];
                         temp2["SubRouteName"] = k["SubRouteName"]["Zh_tw"];
                         if(k.contains("DepartureStopNameZh")) temp2["DepartureStopNameZh"] = k["DepartureStopNameZh"];
                         if(k.contains("DestinationStopNameZh")) temp2["DestinationStopNameZh"] = k["DestinationStopNameZh"];
                         temp["SubRoutes"].emplace_back(temp2);
-                        s.emplace(k["SubRouteUID"].get<std::string>());
+                        set.emplace(k["SubRouteUID"].get<std::string>());
                     }
                 }
                 total.emplace_back(temp);

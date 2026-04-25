@@ -362,9 +362,9 @@ class _BusPageState extends State<BusPage> {
       ),
     );
   }
-  late Future<List<dynamic>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
+  //late Future<List<dynamic>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
   //late Future<List<dynamic>> StopOfRoute = widget.route.City == "InterCity" ? Tdx().getInterBusStopOfRoute(widget.route.RouteUID) : Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
-  //late Future<List<dynamic>> estimates = loadBusEstimates();
+  late Future<List<dynamic>> estimates = loadBusEstimates();
   @override
   Widget build(BuildContext context){
     return FutureBuilder<List<dynamic>>(
