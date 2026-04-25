@@ -45,3 +45,5 @@ app.*.map.json
 /android/app/release
 temp.json
 temp1.json
+android/app/src/main/AndroidManifest.xml
+ios/Runner/AppDelegate.swift

@@ -19,6 +19,8 @@
 票價查詢及時刻表. 
 擁擠程度. --待考慮
 搜索格過濾縣市. 
+後端程式轉移到firebase?
+
 ## Completed
 
 API from TDX (大略) --week1. 

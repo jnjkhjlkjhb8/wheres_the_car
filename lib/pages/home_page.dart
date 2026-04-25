@@ -303,7 +303,7 @@ class _BusPageState extends State<BusPage> {
     }
     else if (EstimateTime <= 60){
       text = Text("進站中",style: TextStyle(fontSize: 15,fontWeight: FontWeight.bold));
-      color = Colors.red;
+      color = Colors.red.shade900;
     }
     else if (EstimateTime <= 120){
       text = Text("即將進站",style: TextStyle(fontSize: 15,fontWeight: FontWeight.bold));
@@ -351,19 +351,19 @@ class _BusPageState extends State<BusPage> {
                 ),
             ),
             Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                ),
-              )  
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+            ),  
           ],
         )
       ),
     );
   }
-  //late Future<List<BusEstimates>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteID);
+  //late Future<List<BusEstimates>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
   late Future<List<BusEstimates>> estimates = loadBusEstimates();
   @override
   Widget build(BuildContext context){
@@ -402,8 +402,8 @@ class _BusPageState extends State<BusPage> {
               title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
               bottom: TabBar(
                 tabs: <Widget> [
-                  Tab(text: "往 ${widget.route.DestinationStopNameZh}"),
-                  Tab(text: "往 ${widget.route.DepartureStopNameZh}"),
+                  if(outbound.isNotEmpty) Tab(text: "往 ${widget.route.DestinationStopNameZh}"),
+                  if(inbound.isNotEmpty) Tab(text: "往 ${widget.route.DepartureStopNameZh}"),
                 ],
               ),
             ),
