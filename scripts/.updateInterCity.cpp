@@ -73,7 +73,7 @@ void getinter() {
                     nlohmann::json temp;
                     temp["RouteUID"] = j["RouteUID"];
                     temp["RouteName"] = j["RouteName"]["Zh_tw"];
-                    temp["City"] = "InterBus";
+                    temp["City"] = "InterCity";
                     temp["Type"] = j["BusRouteType"];
                     temp["SubRouteUID"] = k["SubRouteUID"];
                     temp["SubRouteName"] = k["SubRouteName"]["Zh_tw"];
