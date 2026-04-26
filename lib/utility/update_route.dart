@@ -21,7 +21,7 @@ class UpdateRoute{
     final String? lastFetchTime = db.getData('lastFetchTime');
     if (cachedData == null || lastFetchTime != today) {
       try {
-        final response = await _dio.get("?token=GHSAT0AAAAAADRRESMW7PPWFICW3W3MIUB22PMMC5A");
+        final response = await _dio.get("?token=GHSAT0AAAAAADRRESMWQDDKSZFCEFNPR7CU2POGLAQ");
         if (response.statusCode == 200) {
           String string = (response.data is String) ? response.data : jsonEncode(response.data);
           db.saveData('cachedRoutes', string);
@@ -45,18 +45,18 @@ class UpdateRoute{
   }
 }
 class recent{
-  Future<void> add(String RouteUID) async{
+  Future<void> add(String SubRouteID) async{
     final db = Database();
     String? recent = db.getData('recent');
     Map<String,dynamic> recentList = recent != null ? jsonDecode(recent) : {};
-    recentList[RouteUID] = (recentList[RouteUID] ?? 0) + 1;
+    recentList[SubRouteID] = (recentList[SubRouteID] ?? 0) + 1;
     db.saveData('recent', jsonEncode(recentList));
   }
-  Future<void> del(String RouteUID) async{
+  Future<void> del(String SubRouteUID) async{
     final db = Database();
     String? recent = db.getData('recent');
     Map<String,dynamic> recentList = recent != null ? jsonDecode(recent) : {};
-    recentList.remove(RouteUID);
+    recentList.remove(SubRouteUID);
     db.saveData('recent', jsonEncode(recentList));
   }
   Future<Map<String, dynamic>> get() async{

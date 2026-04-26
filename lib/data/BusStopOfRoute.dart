@@ -5,6 +5,7 @@ List<BusStopOfRoute> busStopOfRouteFromJson(dynamic str) {
   return List<BusStopOfRoute>.from(jsonData.map((x) => BusStopOfRoute.fromJson(x)));
 }
 
+
 class BusStop{
   final String StopUID;
   final String StopID;
@@ -32,19 +33,19 @@ class BusStop{
     }
   );
   factory BusStop.fromJson(Map<String,dynamic> stop){
-    final Stopposition = stop["StopPosition"] as Map<String, dynamic>;
+    final Stopposition = (stop["StopPosition"] as Map?)?.cast<String, dynamic>() ?? {};
     return BusStop(
-      StopUID: stop["StopUID"],
-      StopID: stop["StopID"],
-      StopName: Map<String,String>.from(stop["StopName"]),
-      StopBoarding: stop["StopBoarding"],
-      StopSequence: stop["StopSequence"],
-      PositionLon: Stopposition["PositionLon"],
-      PositionLat: Stopposition["PositionLat"],
-      GeoHash: Stopposition["GeoHash"],
-      StationID: stop["StationID"],
-      LocationCityCode: stop["LocationCityCode"],
-      StationGroupID: stop["StationGroupID"],
+      StopUID: stop["StopUID"]?.toString() ?? "",
+      StopID: stop["StopID"]?.toString() ?? "",
+      StopName: stop["StopName"] is Map ? Map<String, String>.from(stop["StopName"]) : {},
+      StopBoarding: stop["StopBoarding"] as int?,
+      StopSequence: stop["StopSequence"] as int? ?? 0,
+      PositionLon: (Stopposition["PositionLon"] as num?)?.toDouble(),
+      PositionLat: (Stopposition["PositionLat"] as num?)?.toDouble(),
+      GeoHash: Stopposition["GeoHash"]?.toString(),
+      StationID: stop["StationID"]?.toString() ?? "",
+      LocationCityCode: stop["LocationCityCode"]?.toString(),
+      StationGroupID: stop["StationGroupID"]?.toString(),
     );
   }
 }
@@ -70,15 +71,15 @@ class BusStopOfRoute{
   );
   factory BusStopOfRoute.fromJson(Map<String,dynamic> route){
     return BusStopOfRoute(
-      RouteUID: route["RouteUID"],
-      RouteName: Map<String,String>.from(route["RouteName"]),
-      SubRouteUID: route["SubRouteUID"],
-      SubRouteName: Map<String,String>.from(route["SubRouteName"]),
-      Direction: route["Direction"],
-      Stops: (route["Stops"] as List)
-        .map((stop) => BusStop.fromJson(stop))
+      RouteUID: route["RouteUID"]?.toString() ?? "",
+      RouteName: route["RouteName"] is Map ? Map<String, String>.from(route["RouteName"]) : {},
+      SubRouteUID: route["SubRouteUID"]?.toString() ?? "",
+      SubRouteName: route["SubRouteName"] is Map ? Map<String, String>.from(route["SubRouteName"]) : {},
+      Direction: route["Direction"] ?? 255,
+      Stops: ((route["Stops"] as List?) ?? const [])
+        .map((stop) => BusStop.fromJson(Map<String, dynamic>.from(stop)))
         .toList(),
-      UpdateTime: route["UpdateTime"],
+      UpdateTime: route["UpdateTime"]?.toString() ?? "",
     );
   }
 }

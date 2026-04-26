@@ -84,7 +84,7 @@ class Tdx{
   Future<List<BusStopOfRoute>> getBusStopOfRoute(String city,String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/$city/$route",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/City/$city",
         queryParameters: {
           '\$select': "RouteUID,RouteName,SubRouteUID,SubRouteName,Direction,Stops,UpdateTime",
           '\$filter': "RouteUID eq '$route'",
@@ -289,7 +289,7 @@ class Tdx{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity",
         queryParameters: {
-          '\$filter': "RouteID eq '$route'",
+          '\$filter': "RouteUID eq '$route'",
           '\$format': 'JSON',
         },
         options: Options(

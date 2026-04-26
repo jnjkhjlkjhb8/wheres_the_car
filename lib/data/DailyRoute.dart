@@ -7,20 +7,22 @@ class Routes{
   final String City;
   final String? DepartureStopNameZh;
   final String? DestinationStopNameZh;
-  final String RouteID;
-  final String? RouteMapImageUrl;
+  final String? RouteID;
   final String RouteName;
   final String RouteUID;
+  final String? SubRouteUID;
+  final String SubRouteName;
   final int Type;
   Routes({
     required this.City,
     required this.DepartureStopNameZh,
     required this.DestinationStopNameZh,
     required this.RouteID,
-    required this.RouteMapImageUrl,
     required this.RouteName,
     required this.RouteUID,
     required this.Type,
+    required this.SubRouteUID,
+    required this.SubRouteName,
   });
   factory Routes.fromJson(Map<String, dynamic> json) {
     return Routes(
@@ -28,10 +30,11 @@ class Routes{
       DepartureStopNameZh: json['DepartureStopNameZh'],
       DestinationStopNameZh: json['DestinationStopNameZh'],
       RouteID: json['RouteID'],
-      RouteMapImageUrl: json['RouteMapImageUrl'],
       RouteName: json['RouteName'],
       RouteUID: json['RouteUID'],
       Type: json['Type'],
+      SubRouteUID: json['SubRouteUID'],
+      SubRouteName: json['SubRouteName'],
     );
   }
   Map<String, dynamic> toJson() => {
@@ -39,9 +42,10 @@ class Routes{
       'DepartureStopNameZh': DepartureStopNameZh,
       'DestinationStopNameZh': DestinationStopNameZh,
       'RouteID': RouteID,
-      'RouteMapImageUrl': RouteMapImageUrl,
       'RouteName': RouteName,
       'RouteUID': RouteUID,
       'Type': Type,
+      'SubRouteUID': SubRouteUID,
+      'SubRouteName': SubRouteName,
   };
 }

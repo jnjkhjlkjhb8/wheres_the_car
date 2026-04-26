@@ -3,6 +3,7 @@
 #include<fstream>
 #include<vector>
 #include<chrono>
+#include<set>
 #include<thread>
 #include"nlohmann/json.hpp"
 static nlohmann::json total = nlohmann::json::array();
@@ -34,7 +35,10 @@ void getcity() {
             if (json.is_array()) {
                 for (auto &j : json) {
                     if (j["HasSubRoutes"] == true) {
+                        std::set<std::string> set;
                         for (auto &k : j["SubRoutes"]) {
+                            if(set.find(k["SubRouteUID"].get<std::string>()) != set.end()) continue;
+                            set.emplace(k["SubRouteUID"].get<std::string>());
                             nlohmann::json temp;
                             temp["RouteUID"] = j["RouteUID"];
                             temp["RouteName"] = j["RouteName"]["Zh_tw"];
@@ -42,7 +46,6 @@ void getcity() {
                             temp["Type"] = j["BusRouteType"];
                             temp["SubRouteUID"] = k["SubRouteUID"];
                             temp["SubRouteName"] = k["SubRouteName"]["Zh_tw"];
-                            temp["Direction"] = k["Direction"];
                             temp["DestinationStopNameZh"] = k.contains("DestinationStopNameZh") ? k["DestinationStopNameZh"] : j["DestinationStopNameZh"];
                             temp["DepartureStopNameZh"] = k.contains("DepartureStopNameZh") ? k["DepartureStopNameZh"] : j["DepartureStopNameZh"];
                             total.emplace_back(temp);
@@ -73,7 +76,10 @@ void getinter() {
         if (json.is_array()) {
             for (auto &j : json) {
                 if (j["HasSubRoutes"] == true) {
+                    std::set<std::string> set;
                     for (auto &k : j["SubRoutes"]) {
+                        if(set.find(k["SubRouteUID"].get<std::string>()) != set.end()) continue;
+                        set.emplace(k["SubRouteUID"].get<std::string>());
                         nlohmann::json temp;
                         temp["RouteUID"] = j["RouteUID"];
                         temp["RouteName"] = j["RouteName"]["Zh_tw"];
@@ -81,7 +87,6 @@ void getinter() {
                         temp["Type"] = j["BusRouteType"];
                         temp["SubRouteUID"] = k["SubRouteUID"];
                         temp["SubRouteName"] = k["SubRouteName"]["Zh_tw"];
-                        temp["Direction"] = k["Direction"];
                         temp["DestinationStopNameZh"] = k.contains("DestinationStopNameZh") ? k["DestinationStopNameZh"] : j["DestinationStopNameZh"];
                         temp["DepartureStopNameZh"] = k.contains("DepartureStopNameZh") ? k["DepartureStopNameZh"] : j["DepartureStopNameZh"];
                         total.emplace_back(temp);

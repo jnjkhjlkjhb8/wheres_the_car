@@ -146,7 +146,7 @@ class _HomePageState extends State<HomePage> {
                 },
                 suggestionsBuilder: (context,controller) async {
                   if (allRoutes.isEmpty) await fetchRoutes.fetchRoutes();
-                  final input = controller.text.trim();
+                  final input = controller.text.trim().toUpperCase();
                   Map<String,dynamic> recentList = await recent().get();
                   if (input.isEmpty){
                     if (recentList.isEmpty) return [const ListTile(title: Text("沒有最近搜尋紀錄"))];
@@ -155,12 +155,12 @@ class _HomePageState extends State<HomePage> {
                     return recentRoutes.map((route) => ListTile(
                       title: Text.rich(
                         TextSpan(
-                          text: route.RouteName,
+                          text: route.SubRouteName,
                           style: TextStyle(fontWeight: FontWeight.bold),
                           children: [
                             WidgetSpan(child: const SizedBox(width: 5)),
                             TextSpan(
-                              text: _cites[route.City],
+                              text: _cites[route.City] ?? route.City,
                               style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
                             ),
                           ],
@@ -181,12 +181,12 @@ class _HomePageState extends State<HomePage> {
                                   children: [
                                     Text.rich(
                                       TextSpan(
-                                        text: route.RouteName,
+                                        text: route.SubRouteName,
                                         style: TextStyle(fontWeight: FontWeight.bold,fontSize: 20),
                                         children: [
                                           WidgetSpan(child: const SizedBox(width: 5)),
                                           TextSpan(
-                                            text: _cites[route.City],
+                                            text: _cites[route.City] ?? route.City,
                                             style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
                                           ),
                                         ],
@@ -218,7 +218,7 @@ class _HomePageState extends State<HomePage> {
                         )
                       ),
                       onTap: () {
-                        controller.text = route.RouteName;
+                        controller.text = route.SubRouteName;
                         recent().add(route.RouteUID);
                         Navigator.push(
                           context,
@@ -229,7 +229,7 @@ class _HomePageState extends State<HomePage> {
                       },
                     )).toList();
                   }
-                  final foundRoutes = allRoutes.where((route) => route.RouteName.contains(input)).toList();
+                  final foundRoutes = allRoutes.where((route) => route.SubRouteName.contains(input)).toList();
                   if (foundRoutes.isEmpty) return [const ListTile(title: Text("沒有找到相關路線"))];
                   Map<String, List<Routes>> city = {};
                   List<Widget> Display = [];
@@ -238,15 +238,15 @@ class _HomePageState extends State<HomePage> {
                     Display.add(
                       Padding(
                         padding: const EdgeInsets.all(15),
-                        child: Text(_cites[cityKey]!,style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorscheme.primary)),
+                        child: Text(_cites[cityKey] ?? cityKey,style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorscheme.primary)),
                       ),
                     );
                     Display.addAll(
                       routes.map((route) => ListTile(
-                        title: Text(route.RouteName,style: TextStyle(fontWeight: FontWeight.bold)),
+                        title: Text(route.SubRouteName,style: TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text("${route.DepartureStopNameZh} ⇌ ${route.DestinationStopNameZh}"),
                         onTap: () {
-                          controller.text = route.RouteName;
+                          controller.text = route.SubRouteName;
                           recent().add(route.RouteUID);
                           Navigator.push(
                             context,
@@ -275,9 +275,9 @@ class BusPage extends StatefulWidget{
 }
 class _BusPageState extends State<BusPage> {
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
-  Widget buildlisttile(dynamic stop, dynamic colorsceme,bool first,bool last){
-    int? EstimateTime = stop.EstimateTime;
-    int? status = stop.StopStatus;
+  Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
+    int? EstimateTime = estimate?.EstimateTime;
+    int? status = estimate?.StopStatus;
     Color color;
     dynamic text;
     if (status == 3){
@@ -289,7 +289,7 @@ class _BusPageState extends State<BusPage> {
       color = Colors.grey;
     }
     else if (status == 1){
-      text = Text(DateFormat("HH:mm").format(stop.NextBusTime?.toLocal() ?? DateTime.now()),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold));
+      text = Text(DateFormat("HH:mm").format(estimate?.NextBusTime?.toLocal() ?? DateTime.now()),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold));
       color = Colors.grey;
     }
     else if (status == 4){
@@ -364,17 +364,41 @@ class _BusPageState extends State<BusPage> {
   }
   //late Future<List<dynamic>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
   //late Future<List<dynamic>> StopOfRoute = widget.route.City == "InterCity" ? Tdx().getInterBusStopOfRoute(widget.route.RouteUID) : Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
-  late Future<List<dynamic>> estimates = loadBusEstimates();
-  @override
+  late Future<Map<String,List<dynamic>>> _data;
+  void initState(){
+    super.initState();
+    if (widget.route.City == "InterCity"){
+      _data = Future.wait([
+        //Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID),
+        //Tdx().getInterBusStopOfRoute(widget.route.RouteUID)
+        loadBusEstimates(),
+        loadBusStopOfRoute()
+      ]).then((value) => {
+        "estimates": value[0],
+        "stops": value[1]
+      });
+    }
+    else{
+      _data = Future.wait([
+        //Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID),
+        //Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID)
+        loadBusEstimates(),
+        loadBusStopOfRoute()
+      ]).then((value) => {
+        "estimates": value[0],
+        "stops": value[1]
+      });
+    }
+  }
   Widget build(BuildContext context){
-    return FutureBuilder<List<dynamic>>(
-      future: estimates,
+    return FutureBuilder<Map<String,List<dynamic>>>(
+      future: _data,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
             appBar: AppBar(
               centerTitle: true,
-              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
+              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
             ),
             body: Center(child: Text("發生錯誤, ${snapshot.error}",style: const TextStyle(fontWeight: FontWeight.bold))),
           );
@@ -383,15 +407,18 @@ class _BusPageState extends State<BusPage> {
           return Scaffold(
             appBar: AppBar(
               centerTitle: true,
-              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
+              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
-        var group = groupBy(snapshot.data as List<dynamic>, (e) => e.Direction);
-        var group2 = groupBy(loadBusStopOfRoute(widget.route.RouteUID) as List<dynamic>, (e) => e.Direction);
-        List<dynamic> outbound = group[1] ?? [];
-        List<dynamic> inbound = group[0] ?? [];
+        final List<dynamic> estimate = snapshot.data?["estimates"] ?? [];
+        final List<dynamic> stop = snapshot.data?["stops"] ?? [];
+        final Map<String,dynamic> stopMap ={
+          for (var i in estimate) i.StopUID: i
+        };
+        List<dynamic> inbound = stop.firstWhereOrNull((element) => element.Direction == 0)?.Stops ?? [];
+        List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
         outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         int tabcount = inbound.isEmpty ? 0 : 1 + (outbound.isEmpty ? 0 : 1);
@@ -400,7 +427,7 @@ class _BusPageState extends State<BusPage> {
           child: Scaffold(
             appBar: AppBar(
               centerTitle: true,
-              title: Text(widget.route.RouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
               bottom: TabBar(
                 tabs: <Widget> [
                   if(outbound.isNotEmpty) Tab(text: "往 ${widget.route.DestinationStopNameZh}"),
@@ -412,11 +439,11 @@ class _BusPageState extends State<BusPage> {
               children: [
                 if (inbound.isNotEmpty) ListView.builder(
                   itemCount: inbound.length,
-                  itemBuilder: (context, index) => buildlisttile(inbound[index], colorscheme, index == 0, index == inbound.length - 1),
+                  itemBuilder: (context, index) => buildlisttile(inbound[index],stopMap[inbound[index].StopUID],colorscheme, index == 0, index == inbound.length - 1),
                 ),
                 if (outbound.isNotEmpty) ListView.builder(
                   itemCount: outbound.length,
-                  itemBuilder: (context, index) => buildlisttile(outbound[index], colorscheme, index == 0, index == outbound.length - 1),
+                  itemBuilder: (context, index) => buildlisttile(outbound[index],stopMap[outbound[index].StopUID] ,colorscheme, index == 0, index == outbound.length - 1),
                 ),
               ]
             ),
