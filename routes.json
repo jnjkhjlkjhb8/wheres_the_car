@@ -65483,8 +65483,6 @@
     "Type": 11
   },
   {
-<<<<<<< HEAD
-=======
     "City": "PenghuCounty",
     "DepartureStopNameZh": "馬公港（長春、寶華 ）站",
     "DestinationStopNameZh": "澎湖機場",
@@ -67168,7 +67166,6 @@
     "Type": 11
   },
   {
->>>>>>> f89d70995670133a1fd7934b9fccc56c77ff8a9a
     "City": "InterBus",
     "DepartureStopNameZh": "大竹消防隊",
     "DestinationStopNameZh": "庫倫街口",
