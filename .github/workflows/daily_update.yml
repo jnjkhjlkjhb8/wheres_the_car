@@ -4,61 +4,24 @@ on:
       timezone: Asia/Taipei
     workflow_dispatch:
 jobs:
-  fetch1: 
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y g++ curl nlohmann-json3-dev
-        g++ -O3 scripts/updateCity.cpp -o supermachine -I/usr/include/nlohmann/
-    - name: run
-      run: |
-        ./supermachine
-    - name: upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: data1
-        path: routes1.json
-  fetch2:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y g++ curl nlohmann-json3-dev
-        g++ -O3 scripts/updateInterCity.cpp -o supermachine -I/usr/include/nlohmann/
-    - name: run
-      run: |
-        ./supermachine
-    - name: upload
-      uses: actions/upload-artifact@v4
-      with:
-        name: data2
-        path: routes2.json
-  combo:
-    needs: [fetch1, fetch2]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-    - name: download
-      uses: actions/download-artifact@v4
-      with:
-        merge-multiple: true
-    - name: combine
-      run: |
-        sudo apt-get install -y jq
-        jq -s 'add' routes1.json routes2.json > routes.json
-        git config --local user.name "github-actions"
-        git config --local user.email "github-actions@users.noreply.github.com"
-        git add routes.json
-        git commit -m "自動更新資料庫 $(date +%Y-%m-%d)" || echo "No changes to commit"
-        git pull --rebase && git push
-      
-
-
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Setup
+              run: |
+                sudo apt-get update
+                sudo apt-get install -y g++ curl nlohmann-json3-dev
+                g++ -O3 scripts/update.cpp -o supermachine -I/usr/include/nlohmann/
+            - name: Run
+              env:
+                Client_ID: ${{ secrets.CLIENT_ID }}
+                Client_SECRET: ${{ secrets.CLIENT_SECRET }}
+              run: |
+                ./supermachine
+                git config --local user.name "github-actions"
+                git config --local user.email "github-actions@users.noreply.github.com"
+                git add routes.json
+                git commit -m "自動更新資料庫 $(date +%Y-%m-%d)" || echo "No changes to commit"
+                git pull --rebase && git push
