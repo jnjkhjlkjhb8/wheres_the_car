@@ -33,13 +33,13 @@ class BusStop{
     }
   );
   factory BusStop.fromJson(Map<String,dynamic> stop){
-    final Stopposition = (stop["StopPosition"] as Map?)?.cast<String, dynamic>() ?? {};
+    final Stopposition = stop["StopPosition"];
     return BusStop(
       StopUID: stop["StopUID"]?.toString() ?? "",
       StopID: stop["StopID"]?.toString() ?? "",
       StopName: stop["StopName"] is Map ? Map<String, String>.from(stop["StopName"]) : {},
-      StopBoarding: stop["StopBoarding"] as int?,
-      StopSequence: stop["StopSequence"] as int? ?? 0,
+      StopBoarding: stop["StopBoarding"],
+      StopSequence: stop["StopSequence"],
       PositionLon: (Stopposition["PositionLon"] as num?)?.toDouble(),
       PositionLat: (Stopposition["PositionLat"] as num?)?.toDouble(),
       GeoHash: Stopposition["GeoHash"]?.toString(),

@@ -160,7 +160,7 @@ class _HomePageState extends State<HomePage> {
                           children: [
                             WidgetSpan(child: const SizedBox(width: 5)),
                             TextSpan(
-                              text: _cites[route.City] ?? route.City,
+                              text: _cites[route.City],
                               style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
                             ),
                           ],
@@ -186,7 +186,7 @@ class _HomePageState extends State<HomePage> {
                                         children: [
                                           WidgetSpan(child: const SizedBox(width: 5)),
                                           TextSpan(
-                                            text: _cites[route.City] ?? route.City,
+                                            text: _cites[route.City],
                                             style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.normal),
                                           ),
                                         ],
