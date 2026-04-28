@@ -23,8 +23,8 @@ class Tdx{
   Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
   Database _db = Database();
   late String _accesstoken;
-  final String _CilentID = String.fromEnvironment("TDX_CLIENT_ID"); // API 位置
-  final String _CilentSecret = String.fromEnvironment("TDX_CLIENT_SECRET"); // API 位置
+  static const String _CilentID = String.fromEnvironment("TDX_CLIENT_ID"); // API 位置
+  static const String _CilentSecret = String.fromEnvironment("TDX_CLIENT_SECRET"); // API 位置
   Tdx(){
     _accesstoken = _db.getData("token") ?? "";
   }
@@ -259,7 +259,7 @@ class Tdx{
         "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity",
         queryParameters: {
           '\$select': "RouteUID,RouteName,SubRouteUID,SubRouteName,Direction,Stops,UpdateTime",
-          '\$filter': "RouteUID eq '$route'",
+          '\$filter': "SubRouteUID eq '$route'",
           '\$format': 'JSON',
         },
         options: Options(
@@ -289,7 +289,7 @@ class Tdx{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity",
         queryParameters: {
-          '\$filter': "RouteUID eq '$route'",
+          '\$filter': "SubRouteUID eq '$route'",
           '\$format': 'JSON',
         },
         options: Options(

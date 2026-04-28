@@ -229,7 +229,11 @@ class _HomePageState extends State<HomePage> {
                       },
                     )).toList();
                   }
-                  final foundRoutes = allRoutes.where((route) => route.SubRouteName.contains(input)).toList();
+                  final foundRoutes = allRoutes.where((route){
+                    if(!route.SubRouteName.contains(input)) return false;
+                    else if (route.City == "InterCity" && route.SubRouteUID!.endsWith('2')) return false;
+                    return route.SubRouteName.contains(input);
+                  }).toList();
                   if (foundRoutes.isEmpty) return [const ListTile(title: Text("沒有找到相關路線"))];
                   Map<String, List<Routes>> city = {};
                   List<Widget> Display = [];
@@ -367,28 +371,33 @@ class _BusPageState extends State<BusPage> {
   late Future<Map<String,List<dynamic>>> _data;
   void initState(){
     super.initState();
-    if (widget.route.City == "InterCity"){
-      _data = Future.wait([
-        //Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID),
-        //Tdx().getInterBusStopOfRoute(widget.route.RouteUID)
-        loadBusEstimates(),
-        loadBusStopOfRoute()
-      ]).then((value) => {
-        "estimates": value[0],
-        "stops": value[1]
-      });
-    }
-    else{
-      _data = Future.wait([
-        //Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID),
-        //Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID)
-        loadBusEstimates(),
-        loadBusStopOfRoute()
-      ]).then((value) => {
-        "estimates": value[0],
-        "stops": value[1]
-      });
-    }
+      Future<Map<String,List<dynamic>>> loadData() async {
+        List<dynamic> estimates =[];
+        List<dynamic> stops = [];
+        if (widget.route.City == "InterCity"){
+          String? temp = widget.route.SubRouteUID;
+          String temp2 = temp!.substring(0,temp!.length-1)+"2";
+          final res = await Future.wait([
+            Tdx().getInterBusEstimatedTimeOfArrival(temp),
+            Tdx().getInterBusStopOfRoute(temp),
+            Tdx().getInterBusEstimatedTimeOfArrival(temp2),
+            Tdx().getInterBusStopOfRoute(temp2)
+          ]);
+          estimates = res[0];
+          stops = res[1];
+          estimates.addAll(res[2]);
+          stops.addAll(res[3]);
+        }
+        else{
+          estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
+          stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
+        }
+        return {
+          "estimates": estimates,
+          "stops": stops
+        };
+      }
+    _data = loadData();
   }
   Widget build(BuildContext context){
     return FutureBuilder<Map<String,List<dynamic>>>(

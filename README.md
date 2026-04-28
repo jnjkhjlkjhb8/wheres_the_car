@@ -3,10 +3,10 @@
 ## ToDO
 
 主頁 --week3. 
-地圖 --trying on week2 (time == true). 
+地圖 --week2. 
 路線及公車和站牌顯示在地圖上. 
 捷運. --week2
-捷運路線圖. --week2
+捷運路線圖. --week2 (排後). 
 雙鐵
 雙鐵功能. 
 ~~設定排最後~~. 
@@ -29,4 +29,4 @@ Daily Update Routes --week1.
 ## Bug
 
 基隆202路線出現資料錯誤（可能因動態發車）. 
-公總資料或許因沒給NextBusTime造成到站時間顯示錯誤. 
+~~公總資料或許因沒給NextBusTime造成到站時間顯示錯誤. ~~
