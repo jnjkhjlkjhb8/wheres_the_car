@@ -1,5 +1,5 @@
 import 'package:bus/data/BusNearByBus.dart';
-import 'package:bus/data/BusNearByStation.dart';
+import 'package:bus/data/BusNear.dart';
 import 'package:bus/data/BusStationEstimateTime.dart';
 import 'package:bus/data/MetroFirstLastTimetable.dart';
 import 'package:bus/data/MetroLiveBoard.dart';
@@ -187,12 +187,20 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getBusShape(String city,String route) async{
+  Future<Object> getBusShape(String route) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/basic/v2/Bus/Shape/City/$city/$route?\$format=JSON",
+        "https://tdx.transportdata.tw/api/basic/v2/Bus/Shape/City/",
+          queryParameters: {
+            '\$select': "SubRouteUID,SubRouteName,Direction,EncodedPolyline,UpdateTime",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip"
+          },
         )
       );
       if(response.statusCode == 200){
@@ -204,17 +212,25 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getBusShape(city, route);
+        return getBusShape(route);
       }
       rethrow;
     }
   }
-  Future<Object> getBusNearByStation(double Lon,double Lat) async{
+  Future<Object> getBusNearByStation(double Lon,double Lat,int range) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/advanced/v2/Bus/Station/NearBy?%24top=30&%24spatialFilter=nearby%28$Lat%2C%20$Lon%2C%20500%29&%24format=JSON",
+        "https://tdx.transportdata.tw/api/advanced/v2/Bus/Station/NearBy",
+          queryParameters: {
+            '\$select': "StationUID,StationName,StopPosition,StationGroupID,Bearing,UpdateTime,Stops",
+            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$format': 'JSON',
+          },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: {
+            "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip"
+          },
         )
       );
       if(response.statusCode == 200){
@@ -226,7 +242,7 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getBusNearByStation(Lon, Lat);
+        return getBusNearByStation(Lon, Lat,range);
       }
       rethrow;
     }
@@ -236,7 +252,9 @@ class Tdx{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/advanced/v2/Bus/RealTimeByFrequency/NearBy?%24top=30&%24spatialFilter=nearby%28$Lat%2C%20$Lon%2C%20500%29&%24format=JSON",
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken","Content-Encoding": "br,gzip" },
+          headers: { "authorization": "Bearer $_accesstoken",
+            "Content-Encoding": "br,gzip"
+          },
         )
       );
       if(response.statusCode == 200){
