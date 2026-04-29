@@ -253,13 +253,13 @@ class Tdx{
       rethrow;
     }
   }
-  Future<List<BusStopOfRoute>> getInterBusStopOfRoute(String route) async{
+  Future<List<BusStopOfRoute>> getInterBusStopOfRoute(String route,String route2) async{
     try{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/basic/v2/Bus/StopOfRoute/InterCity",
         queryParameters: {
           '\$select': "RouteUID,RouteName,SubRouteUID,SubRouteName,Direction,Stops,UpdateTime",
-          '\$filter': "SubRouteUID eq '$route'",
+          '\$filter': "SubRouteUID eq '$route' or SubRouteUID eq '$route2'",
           '\$format': 'JSON',
         },
         options: Options(
@@ -279,19 +279,20 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getInterBusStopOfRoute(route);
+        return getInterBusStopOfRoute(route,route2);
       }
       rethrow;
     }
   }
-  Future<List<BusEstimates>> getInterBusEstimatedTimeOfArrival(String route) async{
+  Future<List<BusEstimates>> getInterBusEstimatedTimeOfArrival(String route,String route2) async{
     try{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/basic/v2/Bus/EstimatedTimeOfArrival/InterCity",
-        queryParameters: {
-          '\$filter': "SubRouteUID eq '$route'",
-          '\$format': 'JSON',
-        },
+          queryParameters: {
+            '\$select': "PlateNumb,StopUID,Direction,EstimateTime,ScheduledTime,IsLastBus,Estimates,UpdateTime",
+            '\$filter': "SubRouteUID eq '$route' or SubRouteUID eq '$route2'",
+            '\$format': 'JSON',
+          },
         options: Options(
           headers: {
             "authorization": "Bearer $_accesstoken",
@@ -309,7 +310,7 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getInterBusEstimatedTimeOfArrival(route);
+        return getInterBusEstimatedTimeOfArrival(route,route2);
       }
       rethrow;
     }

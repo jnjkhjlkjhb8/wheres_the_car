@@ -377,16 +377,8 @@ class _BusPageState extends State<BusPage> {
         if (widget.route.City == "InterCity"){
           String? temp = widget.route.SubRouteUID;
           String temp2 = temp!.substring(0,temp!.length-1)+"2";
-          final res = await Future.wait([
-            Tdx().getInterBusEstimatedTimeOfArrival(temp),
-            Tdx().getInterBusStopOfRoute(temp),
-            Tdx().getInterBusEstimatedTimeOfArrival(temp2),
-            Tdx().getInterBusStopOfRoute(temp2)
-          ]);
-          estimates = res[0];
-          stops = res[1];
-          estimates.addAll(res[2]);
-          stops.addAll(res[3]);
+          estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
+          stops = await Tdx().getInterBusStopOfRoute(temp,temp2);
         }
         else{
           estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);

@@ -45,9 +45,9 @@ app.*.map.json
 /android/app/release
 temp.json
 temp1.json
-android/app/src/main/AndroidManifest.xml
 ios/Runner/AppDelegate.swift
 token.env
 .vscode/launch.json
 android/app/build.gradle.kts
 .gitignore
+android/app/src/main/AndroidManifest.xml
