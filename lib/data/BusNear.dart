@@ -47,7 +47,7 @@ class Busnearbystation {
     }
   );
   factory Busnearbystation.fromJson(Map<String,dynamic> busnearbystation){
-    final stopPosition = busnearbystation["StopPosition"] as Map<String, dynamic>;
+    final stopPosition = busnearbystation["StationPosition"] as Map<String, dynamic>;
     return Busnearbystation(
       StationUID: busnearbystation["StationUID"],
       StationName: Map<String,String>.from(busnearbystation["StationName"]),
