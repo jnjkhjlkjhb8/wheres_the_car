@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_maps_utils/google_maps_utils.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api/main.dart';
+import 'package:dart_geohash/dart_geohash.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -17,7 +18,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
   late AnimationController _animationController;
-  late Position _position;
+  Position? _position;
+  Map<String, List<dynamic>> merge = {};
+  List<dynamic> bus = [];
+  List<dynamic> mrt = [];
+  List<dynamic> bike = [];
+
+  void Merge() {
+    merge = {};
+    for (var item in bus) {
+      String key = item.StationUID;
+      if (!merge.containsKey(key)) {
+        merge[key] = [];
+      }
+      merge[key]!.add(item);
+    }
+  }
   int range = 500;
   @override
   void initState() {
@@ -44,18 +60,62 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     } else {
     return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);}
   }
+
   void update() async {
-    _position = await _getCurrentLocation();
-    _mapController.animateCamera(
-      CameraUpdate.newLatLngZoom(
-        LatLng(_position.latitude, _position.longitude),
-        26,
-      ),
-    );
+    try {
+      Position pos = await _getCurrentLocation();
+      Object busData = await Tdx().getBusNearByStation(pos.longitude, pos.latitude, range);
+      Object mrtData = await Tdx().getMetroNear(pos.longitude, pos.latitude, range);
+      Object bikeData = await Tdx().get(pos.longitude, pos.latitude
+      setState(() {
+        _position = pos;
+        if (busData is List<dynamic>) {
+          bus = busData;
+        }
+        Merge();
+      });
+      _mapController.animateCamera(
+        CameraUpdate.newLatLngZoom(
+          LatLng(pos.latitude, pos.longitude),
+          16,
+        ),
+      );
+    } catch (e) {
+      debugPrint("Error updating location/bus: $e");
+    }
   }
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorsheme = Theme.of(context).colorScheme;
+    Widget Stationtile(String name) {
+      final data = merge[name];
+      if (data == null || data.isEmpty || _position == null) return Container();
+      final String temp = GeoHasher().encode(data[0].PositionLat, data[0].PositionLon, precision: 10);
+      return ListTile(
+        title: Text(data[0].StationName['Zh_tw'] ?? name),
+        subtitle: Text("約${Geolocator.distanceBetween(_position!.latitude, _position!.longitude, data[0].PositionLat, data[0].PositionLon).toStringAsFixed(2)}公尺"),
+        leading: IconButton(
+          onPressed: () {
+            int count = 0;
+            int len = temp.length > data[0].GeoHash.length ? data[0].GeoHash.length : temp.length;
+            for (int i = 0; i < len; i++) {
+              if (temp[i] == data[0].GeoHash[i]) {
+                count++;
+              } else {
+                break;
+              }
+            }
+            _mapController.animateCamera(
+              CameraUpdate.newLatLngZoom(
+                LatLng((_position!.latitude + data[0].PositionLat) / 2, (_position!.longitude + data[0].PositionLon) / 2),
+                count >= 7 ? 18.0 : count == 6 ? 16.0 : count == 5 ? 14.0 : 12.0,
+              ),
+            );
+          },
+          icon: Icon(Icons.location_searching_rounded),
+        ),
+      );
+    }
     return Scaffold(
       bottomSheet: BottomSheet(
         animationController: _animationController,
@@ -102,6 +162,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
                               onSelectionChanged: (Set<int> newSelection) {
                                 setState(() {
                                   range = newSelection.first;
+                                  update();
                                 });
                               },
                             ),
@@ -119,7 +180,16 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
                       Expanded(
                         child: TabBarView(
                           children: [
-                            Center(child: Text('公車資訊')),
+                            Builder(
+                              builder: (context) {
+                                List<Widget> array = [];
+                                for (String i in merge.keys) array.add(Stationtile(i));
+                                return ListView(
+                                  controller: scrollController,
+                                  children: array,
+                                );
+                              }
+                            ),
                             Center(child: Text('捷運 / 輕軌資訊')),
                             Center(child: Text('公共自行車資訊')),
                           ],

@@ -18,6 +18,7 @@ import '../data/BusEstimateTime.dart';
 import '../data/BusPosition.dart';
 import '../data/BusShape.dart';
 import '../data/BusRoute.dart';
+import '../data/MetroNear.dart';
 
 class Tdx{
   Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
@@ -243,6 +244,36 @@ class Tdx{
       if(e.response?.statusCode == 401){
         await getToken();
         return getBusNearByStation(Lon, Lat,range);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getMetroNear(double Lon,double Lat,int range) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/advanced/v2/Metro/Station/NearBy",
+          queryParameters: {
+            '\$select': "StationPosition,LocationCity,StationUID,StationName",
+            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return MetroNear.fromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getMetroNear(Lon, Lat,range);
       }
       rethrow;
     }
