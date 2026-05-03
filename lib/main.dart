@@ -2,10 +2,23 @@ import 'package:bus/pages/home_page.dart';
 import '../pages/map_page.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+import 'dart:math';
 
 void main() async {
   await Hive.initFlutter();
-  await Hive.openBox("myBox");
+  final storage = const FlutterSecureStorage();
+  String? keyString = await storage.read(key: 'hive_key');
+  late List<int> key;
+  if (keyString == null) {
+    key = List<int>.generate(32, (i) => Random.secure().nextInt(256));
+    await storage.write(key: 'hive_key', value: jsonEncode(key));
+  }
+  else {
+    key = List<int>.from(jsonDecode(keyString) as List<dynamic>);
+  }
+  await Hive.openBox("myBox", encryptionCipher: HiveAesCipher(key));
   runApp(const MyApp());
 }
 

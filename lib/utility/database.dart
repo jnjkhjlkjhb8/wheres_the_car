@@ -3,12 +3,12 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 class Database{
   List past = [];
-  final _myBox = Hive.box("mybox");
+  late final Box<dynamic> _myBox;
   Database(){
-    Hive.openBox("myBox");
+    _myBox = Hive.box("myBox");
   }
-  void saveData(String index,String temp){
-    _myBox.put(index,temp);
+  void saveData(String index, String temp){
+    _myBox.put(index, temp);
   }
   String? getData(String index){
     return _myBox.get(index);

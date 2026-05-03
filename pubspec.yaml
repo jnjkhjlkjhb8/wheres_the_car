@@ -46,6 +46,7 @@ dependencies:
   flutter_polyline_points: ^3.1.0
   geolocator: ^9.0.2
   dart_geohash: ^2.1.0
+  flutter_secure_storage: ^9.2.2
 
 dev_dependencies:
   flutter_test:

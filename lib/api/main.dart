@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:bus/data/BusNearByBus.dart';
 import 'package:bus/data/BusNear.dart';
 import 'package:bus/data/BusStationEstimateTime.dart';
@@ -19,6 +20,7 @@ import '../data/BusPosition.dart';
 import '../data/BusShape.dart';
 import '../data/BusRoute.dart';
 import '../data/MetroNear.dart';
+import '../data/BikeNear.dart';
 
 class Tdx{
   Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
@@ -218,12 +220,12 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getBusNearByStation(double Lon,double Lat,int range) async{
+  Future<List<Busnearbystation>> getBusNearByStation(double Lon,double Lat,int range) async{
     try{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/advanced/v2/Bus/Station/NearBy",
           queryParameters: {
-            '\$select': "StationUID,StationName,StopPosition,StationGroupID,Bearing,UpdateTime,Stops",
+            '\$select': "StationUID,StationName,StationPosition,StationGroupID,Bearing,UpdateTime,Stops",
             '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
             '\$format': 'JSON',
           },
@@ -248,10 +250,10 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getMetroNear(double Lon,double Lat,int range) async{
+  Future<List<MetroNear>> getMetroNear(double Lon,double Lat,int range) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/advanced/v2/Metro/Station/NearBy",
+          "https://tdx.transportdata.tw/api/advanced/v2/Rail/Metro/Station/NearBy",
           queryParameters: {
             '\$select': "StationPosition,LocationCity,StationUID,StationName",
             '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
@@ -265,7 +267,7 @@ class Tdx{
           )
       );
       if(response.statusCode == 200){
-        return MetroNear.fromJson(response.data);
+        return MetroNearFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }
@@ -274,6 +276,70 @@ class Tdx{
       if(e.response?.statusCode == 401){
         await getToken();
         return getMetroNear(Lon, Lat,range);
+      }
+      rethrow;
+    }
+  }
+  Future<List<BikeStation>> getBikeNear(double Lon,double Lat,int range) async{
+    try{
+      final response = await Future.wait([
+        _dio.get(
+          "https://tdx.transportdata.tw/api/advanced/v2/Bike/Station/NearBy",
+          queryParameters: {
+            '\$select': "StationUID,StationName,StationPosition,BikesCapacity,ServiceType",
+            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+        ),
+        _dio.get(
+          "https://tdx.transportdata.tw/api/advanced/v2/Bike/Availability/NearBy",
+          queryParameters: {
+            '\$select': "StationUID,ServiceStatus,AvailableReturnBikes,AvailableRentBikesDetail,SrcUpdateTime",
+            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+        ),
+      ]);
+      List<dynamic> stationData = response[0].data is String ? json.decode(response[0].data) : response[0].data;
+      List<dynamic> availabilityData = response[1].data is String ? json.decode(response[1].data) : response[1].data;
+      final mp = {
+        for (var i in availabilityData) i['StationUID'] : i
+      };
+      return stationData.map((e) {
+        final availability = mp[e['StationUID']];
+        return BikeStation(
+          StationUID: e['StationUID'] ?? "",
+          StationName: Map<String, String>.from(e['StationName'] ?? {}),
+          PositionLon: (e['StationPosition']?['PositionLon'] ?? 0.0).toDouble(),
+          PositionLat: (e['StationPosition']?['PositionLat'] ?? 0.0).toDouble(),
+          GeoHash: e['StationPosition']?['GeoHash'] ?? "",
+          BikesCapacity: e['BikesCapacity'] ?? 0,
+          ServiceType: e['ServiceType'] ?? 0,
+          ServiceStatus: availability?['ServiceStatus'] ?? 0,
+          AvailableReturnBikes: availability?['AvailableReturnBikes'] ?? 0,
+          AvailableRentBikesDetail: Map<String, int>.from(availability?['AvailableRentBikesDetail'] ?? {}),
+          UpdateTime: availability != null && availability['SrcUpdateTime'] != null
+              ? DateTime.parse(availability['SrcUpdateTime'])
+              : DateTime.now(),
+        );
+      }).toList();
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBikeNear(Lon, Lat,range);
       }
       rethrow;
     }

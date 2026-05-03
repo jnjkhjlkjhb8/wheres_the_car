@@ -1,6 +1,10 @@
 import 'dart:convert';
 
-List<MetroNear> MetroNearFromJson(String str) => List<MetroNear>.from(json.decode(str).map((x) => MetroNear.fromJson(x)));
+List<MetroNear> MetroNearFromJson(dynamic data) {
+  if (data is String) return List<MetroNear>.from(json.decode(data).map((x) => MetroNear.fromJson(x)));
+  else if (data is List) return List<MetroNear>.from(data.map((x) => MetroNear.fromJson(x)));
+  return [];
+}
 
 class MetroNear{
   final double? PositionLon;
@@ -19,8 +23,8 @@ class MetroNear{
   });
   factory MetroNear.fromJson(Map<String, dynamic> json) {
     return MetroNear(
-      PositionLon: json['StationPosition']['PositionLon'],
-      PositionLat: json['StationPosition']['PositionLat'],
+      PositionLon: json['StationPosition']['PositionLon'].toDouble(),
+      PositionLat: json['StationPosition']['PositionLat'].toDouble(),
       GeoHash: json['StationPosition']['GeoHash'],
       LocationCity: json['LocationCity'],
       StationUID: json['StationUID'],

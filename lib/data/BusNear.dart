@@ -1,6 +1,13 @@
 import 'dart:convert';
 
-List<Busnearbystation> BusnearbystationFromJson(String str) => List<Busnearbystation>.from(json.decode(str).map((x) => Busnearbystation.fromJson(x)));
+List<Busnearbystation> BusnearbystationFromJson(dynamic str) {
+  final List<dynamic> jsonData = str is String ? json.decode(str) : str;
+  return List<Busnearbystation>.from(jsonData.map((x) => Busnearbystation.fromJson(x)));
+}
+List<BusStops> BusStopsFromJson(dynamic str) {
+  final List<dynamic> jsonData = str is String ? json.decode(str) : str;
+  return List<BusStops>.from(jsonData.map((x) => BusStops.fromJson(x)));
+}
 
 class BusStops{
   final String StopUID;
@@ -29,7 +36,7 @@ class Busnearbystation {
   final Map<String, String> StationName;
   final double PositionLon,PositionLat;
   final String GeoHash;
-  final String StationGroupID;
+  final String? StationGroupID;
   final String Bearing;
   final DateTime UpdateTime;
   final List<BusStops> stops;
@@ -47,17 +54,17 @@ class Busnearbystation {
     }
   );
   factory Busnearbystation.fromJson(Map<String,dynamic> busnearbystation){
-    final stopPosition = busnearbystation["StationPosition"] as Map<String, dynamic>;
     return Busnearbystation(
-      StationUID: busnearbystation["StationUID"],
+      StationUID: busnearbystation["StationUID"]?.toString() ?? '',
       StationName: Map<String,String>.from(busnearbystation["StationName"]),
-      PositionLon: stopPosition["PositionLon"],
-      PositionLat: stopPosition["PositionLat"],
-      GeoHash: stopPosition["GeoHash"],
-      stops: List<BusStops>.from(busnearbystation["Stops"].map((x) => BusStops.fromJson(x))),
-      StationGroupID: busnearbystation["StationGroupID"],
-      Bearing: busnearbystation["Bearing"],
-      UpdateTime: DateTime.parse(busnearbystation["UpdateTime"]),
+      PositionLon: busnearbystation["StationPosition"]["PositionLon"].toDouble(),
+      PositionLat: busnearbystation["StationPosition"]["PositionLat"].toDouble(),
+      GeoHash: busnearbystation["StationPosition"]["GeoHash"].toString(),
+      stops: BusStopsFromJson(busnearbystation["Stops"]),
+      StationGroupID: busnearbystation["StationGroupID"].toString(),
+      Bearing: busnearbystation["Bearing"].toString(),
+      UpdateTime: DateTime.parse(busnearbystation["UpdateTime"],
+      )
     );
   }
 }
