@@ -194,11 +194,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
                                           if(merge.isEmpty) return Center(child: Text('附近沒有公車站牌'));
                                           List<String> temp = merge.keys.toList();
                                           List<Widget> array = [];
-                                          /*temp.sort((a,b)){
+                                          temp.sort((a,b){
                                             double distA = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[a]![0].PositionLat, merge[a]![0].PositionLon);
                                             double distB = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[b]![0].PositionLat, merge[b]![0].PositionLon);
                                             return distA.compareTo(distB);
-                                          }*/
+                                          });
                                           for (String i in merge.keys) array.add(Stationtile(i));
                                           return ListView(
                                             controller: scrollController,
