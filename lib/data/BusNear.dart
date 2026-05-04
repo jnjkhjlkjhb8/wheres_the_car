@@ -33,6 +33,7 @@ class BusStops{
 }
 class Busnearbystation {
   final String StationUID;
+  final String StationID;
   final Map<String, String> StationName;
   final double PositionLon,PositionLat;
   final String GeoHash;
@@ -40,9 +41,11 @@ class Busnearbystation {
   final String Bearing;
   final DateTime UpdateTime;
   final List<BusStops> stops;
+  final String LocationCityCode;
   Busnearbystation(
     {
       required this.StationUID,
+      required this.StationID,
       required this.StationName,
       required this.PositionLon,
       required this.PositionLat,
@@ -51,11 +54,13 @@ class Busnearbystation {
       required this.Bearing,
       required this.UpdateTime,
       required this.stops,
+      required this.LocationCityCode
     }
   );
   factory Busnearbystation.fromJson(Map<String,dynamic> busnearbystation){
     return Busnearbystation(
       StationUID: busnearbystation["StationUID"]?.toString() ?? '',
+      StationID: busnearbystation["StationID"]?.toString() ?? '',
       StationName: Map<String,String>.from(busnearbystation["StationName"]),
       PositionLon: busnearbystation["StationPosition"]["PositionLon"].toDouble(),
       PositionLat: busnearbystation["StationPosition"]["PositionLat"].toDouble(),
@@ -63,6 +68,7 @@ class Busnearbystation {
       stops: BusStopsFromJson(busnearbystation["Stops"]),
       StationGroupID: busnearbystation["StationGroupID"].toString(),
       Bearing: busnearbystation["Bearing"].toString(),
+      LocationCityCode: busnearbystation["LocationCityCode"].toString(),
       UpdateTime: DateTime.parse(busnearbystation["UpdateTime"],
       )
     );

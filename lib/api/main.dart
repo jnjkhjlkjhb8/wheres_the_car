@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:bus/data/BusNearByBus.dart';
 import 'package:bus/data/BusNear.dart';
 import 'package:bus/data/BusStationEstimateTime.dart';
 import 'package:bus/data/MetroFirstLastTimetable.dart';
@@ -31,30 +30,30 @@ class Tdx{
   Tdx(){
     _accesstoken = _db.getData("token") ?? "";
   }
-  final List<(String,String)> _cites = [
-    ("Taipei", "台北市"),
-    ("NewTaipei", "新北市"),
-    ("Taoyuan", "桃園市"),
-    ("Taichung", "台中市"),
-    ("Tainan", "台南市"),
-    ("Kaohsiung", "高雄市"),
-    ("Keelung", "基隆市"),
-    ("Hsinchu", "新竹市"),
-    ("HsinchuCounty", "新竹縣"),
-    ("MiaoliCounty", "苗栗縣"),
-    ("ChanghuaCounty", "彰化縣"),
-    ("NantouCounty", "南投縣"),
-    ("YunlinCounty", "雲林縣"),
-    ("ChiayiCounty", "嘉義縣"),
-    ("Chiayi", "嘉義市"),
-    ("PingtungCounty", "屏東縣"), 
-    ("YilanCounty", "宜蘭縣"),
-    ("HualienCounty", "花蓮縣"),
-    ("TaitungCounty", "台東縣"),
-    ("KinmenCounty", "金門縣"),
-    ("PenghuCounty", "澎湖縣"),
-    ("LienchiangCounty", "連江縣")
-  ]; // size = 19
+  final Map<String, String> _cites = {
+    "TPE":"Taipei",
+    "NWT": "NewTaipei",
+    "TAO": "Taoyuan",
+    "TXG": "Taichung",
+    "TNN": "Tainan",
+    "KHH": "Kaohsiung",
+    "KEE": "Keelung",
+    "HSZ": "Hsinchu",
+    "HSQ": "HsinchuCounty",
+    "MIA": "MiaoliCounty",
+    "CHA": "ChanghuaCounty",
+    "NAN": "NantouCounty",
+    "YUN": "YunlinCounty",
+    "CYQ": "ChiayiCounty",
+    "CYI": "Chiayi",
+    "PIF": "PingtungCounty",
+    "ILA": "YilanCounty",
+    "HUA": "HualienCounty",
+    "TTT": "TaitungCounty",
+    "KIN": "KinmenCounty",
+    "PEN": "PenghuCounty",
+    "LIE": "LienchiangCounty",
+  }; // size = 19
   Future<String> getToken() async{
     try{
       Response response = await _dio.post(
@@ -155,7 +154,7 @@ class Tdx{
         )
       );
       if(response.statusCode == 200){
-        return BusPositionFromJson(response.data);
+        return BuspositionFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }
@@ -225,7 +224,7 @@ class Tdx{
       Response response = await _dio.get(
         "https://tdx.transportdata.tw/api/advanced/v2/Bus/Station/NearBy",
           queryParameters: {
-            '\$select': "StationUID,StationName,StationPosition,StationGroupID,Bearing,UpdateTime,Stops",
+            '\$select': "StationUID,StationID,StationName,StationPosition,StationGroupID,Bearing,LocationCityCode,UpdateTime,Stops",
             '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
             '\$format': 'JSON',
           },
@@ -344,18 +343,23 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getBusNearByBus(double Lon,double Lat) async{
+  Future<Object> getBusPositionByStation(String City,String StationUID) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/advanced/v2/Bus/RealTimeByFrequency/NearBy?%24top=30&%24spatialFilter=nearby%28$Lat%2C%20$Lon%2C%20500%29&%24format=JSON",
+        "https://tdx.transportdata.tw/api/advanced/v2/Bus/RealTimeByFrequency/City/${_cites[City]!}/PassThrough/Station/${StationUID}",
+        queryParameters: {
+          '\$select': "PlateNumb,SubRouteUID,SubRouteName,BusPosition,Speed,Azimuth,BusStatus,GPSTime",
+          '\$format': 'JSON',
+        },
         options: Options(
-          headers: { "authorization": "Bearer $_accesstoken",
+          headers: {
+            "authorization": "Bearer $_accesstoken",
             "Content-Encoding": "br,gzip"
           },
         )
       );
       if(response.statusCode == 200){
-        return BusNearByBusFromJson(response.data);
+        return BuspositionFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }
@@ -363,7 +367,69 @@ class Tdx{
     on DioException catch (e){
       if(e.response?.statusCode == 401){
         await getToken();
-        return getBusNearByBus(Lon, Lat);
+        return getBusPositionByStation(City, StationUID);
+      }
+      rethrow;
+    }
+  }
+  Future<List<BusN1EstimateTime>> getBusEstimateByStation(String City,String StationUID) async {
+    String? city = _cites[City];
+    if (city == null) {
+      print("City code not found: $City");
+    }
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/City/${city}/PassThrough/Station/${StationUID}",
+          queryParameters: {
+            '\$select': "PlateNumb,SubRouteUID,SubRouteName,EstimateTime,ScheduledTime,DestinationStop,StopStatus,NextBusTime,IsLastBus,Estimates,UpdateTime",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return busN1EstimateTimeFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBusEstimateByStation(City, StationUID);
+      }
+      rethrow;
+    }
+  }
+  Future<List<BusN1EstimateTime>> getInterBusEstimateByStation(String StationUID) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/InterCity/PassThrough/Station/${StationUID}",
+          queryParameters: {
+            '\$select': "PlateNumb,SubRouteUID,SubRouteName,EstimateTime,ScheduledTime,DestinationStop,StopStatus,NextBusTime,IsLastBus,Estimates,UpdateTime",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return getInterBusEstimateByStation(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getInterBusEstimateByStation(StationUID);
       }
       rethrow;
     }
@@ -439,7 +505,7 @@ class Tdx{
         )
       );
       if(response.statusCode == 200){
-        return BusPositionFromJson(response.data);
+        return BuspositionFromJson(response.data);
       }else{
         throw Exception("Failed to get bus route");
       }

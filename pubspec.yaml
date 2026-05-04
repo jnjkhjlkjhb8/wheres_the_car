@@ -37,7 +37,6 @@ dependencies:
   cupertino_icons: ^1.0.8
   provider: ^6.0.5
   dio: ^5.9.2
-  shared_preferences: ^2.5.5
   animated_text_kit: ^4.3.0
   pretty_dio_logger: ^1.4.0
   intl: ^0.20.2
@@ -72,9 +71,9 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  assets:
-    - temp.json
-    - test.json
+  # assets:
+  #  - temp.json
+  #  - test.json
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

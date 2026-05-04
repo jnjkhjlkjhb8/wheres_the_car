@@ -376,7 +376,7 @@ class _BusPageState extends State<BusPage> {
         List<dynamic> stops = [];
         if (widget.route.City == "InterCity"){
           String? temp = widget.route.SubRouteUID;
-          String temp2 = temp!.substring(0,temp!.length-1)+"2";
+          String temp2 = temp!.substring(0,temp.length-1)+"2";
           estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
           stops = await Tdx().getInterBusStopOfRoute(temp,temp2);
         }
