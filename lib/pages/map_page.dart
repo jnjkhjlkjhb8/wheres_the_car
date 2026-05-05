@@ -67,6 +67,14 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     } else {
     return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);}
   }
+  void buildmarker(){
+    setState(() {
+      _markers.clear();
+      for (var i in bus) {
+
+      }
+    });
+  }
   Future<void> update() async {
     try {
       Position pos = await _getCurrentLocation();
@@ -86,6 +94,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
         mrt = mrtData;
         bike = bikeData;
         Merge();
+        buildmarker();
       });
     }
     catch (e) {
@@ -264,8 +273,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
             myLocationButtonEnabled: false,
             padding: const EdgeInsets.only(bottom: 200),
             initialCameraPosition: CameraPosition(
-              target: LatLng(0, 0),
-              zoom: 5,
+              target: LatLng(25.0339, 121.5646),
+              zoom: 16,
             ),
             markers: _markers,
             polylines: _polylines,

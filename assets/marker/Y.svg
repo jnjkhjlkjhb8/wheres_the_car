@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="_圖層_1" data-name="圖層 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #ffdb00;
+      }
+    </style>
+  </defs>
+  <rect class="cls-1" x="12" y="12" width="1000" height="1000" rx="180" ry="180"/>
+  <path d="M483.82,520.64l-133.32-233.48h59.39l57.57,107.64c14.54,28.08,27.88,55.12,43.63,83.72h2.42c15.76-28.6,30.91-55.64,44.85-83.72l56.97-107.64h58.18l-133.93,233.48v147.68h-55.75v-147.68Z"/>
+</svg>
