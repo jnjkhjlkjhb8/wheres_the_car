@@ -10,7 +10,6 @@ import 'package:dart_geohash/dart_geohash.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
-
   @override
   State<MapPage> createState() => _MapPageState();
 }
@@ -24,6 +23,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   List<dynamic>? _busData;
   Map<String,String>? _busname;
   Position? _position;
+  int range = 500;
+  double zoom = 16.0;
+  String? _selected;
   Map<String, List<dynamic>> merge = {};
   List<dynamic> bus = [];
   List<dynamic> mrt = [];
@@ -38,17 +40,18 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
       merge[key]!.add(item);
     }
   }
-  int range = 500;
   @override
   void initState() {
     super.initState();
     _animationController = BottomSheet.createAnimationController(this);
     _animationController.duration = Duration(milliseconds: 300);
   }
+  @override
   void dispose() {
     _animationController.dispose();
     super.dispose();
   }
+  @override
   Future<Position> _getCurrentLocation() async {
     LocationPermission permission;
     bool yes = await Geolocator.isLocationServiceEnabled();
@@ -64,7 +67,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     } else {
     return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);}
   }
-
   Future<void> update() async {
     try {
       Position pos = await _getCurrentLocation();
