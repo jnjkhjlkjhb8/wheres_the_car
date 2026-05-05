@@ -7,6 +7,7 @@ import '../api/main.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:dart_geohash/dart_geohash.dart';
+import '../utility/markermaker.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -20,6 +21,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   final Set<Marker> _markers = {};
   final Set<Polyline> _polylines = {};
   late AnimationController _animationController;
+  Map<String, BitmapDescriptor> _icons = {};
   List<dynamic>? _busData;
   Map<String,String>? _busname;
   Position? _position;
@@ -43,6 +45,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   @override
   void initState() {
     super.initState();
+    initicons();
     _animationController = BottomSheet.createAnimationController(this);
     _animationController.duration = Duration(milliseconds: 300);
   }
@@ -52,6 +55,13 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     super.dispose();
   }
   @override
+  Future<void> initicons() async {
+    final icons = await Markermaker().loadicons(context);
+    setState(() {
+      _icons = icons;
+    });
+    if (bus.isNotEmpty) buildmarker();
+  }
   Future<Position> _getCurrentLocation() async {
     LocationPermission permission;
     bool yes = await Geolocator.isLocationServiceEnabled();
@@ -71,9 +81,46 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     setState(() {
       _markers.clear();
       for (var i in bus) {
-
+        _markers.add(createMarker(i, _icons['Bus'],BitmapDescriptor.hueAzure));
+      }
+      for (var i in mrt){
+        _markers.add(createMarker(i, _icons['BL'],BitmapDescriptor.hueBlue));
+      }
+      for (var i in bike){
+        _markers.add(createMarker(i, _icons['Bike'],BitmapDescriptor.hueYellow));
       }
     });
+  }
+  Marker createMarker(dynamic data,BitmapDescriptor? icon, double hue){
+    final String UID = data.StationUID;
+    final bool selected = _selected == UID;
+    BitmapDescriptor ficon;
+    if (selected) {
+      ficon = _icons['Pegman'] ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
+    }
+    else if(zoom < 14.5){
+      ficon = BitmapDescriptor.defaultMarkerWithHue(hue);
+    }
+    else {
+      ficon = icon ?? BitmapDescriptor.defaultMarkerWithHue(hue);
+    }
+    return Marker(
+      markerId: MarkerId(UID),
+      position: LatLng(data.PositionLat, data.PositionLon),
+      icon: ficon,
+      anchor: (zoom < 14.5 && !selected) ? Offset(0.5, 0.5) : Offset(0.5, 1.0),
+      onTap: () {
+        setState(() {
+          _selected = UID;
+          if(hue == BitmapDescriptor.hueAzure){
+            _busData = merge[data.StationName['Zh_tw']];
+            _busname = data.StationName;
+          }
+        });
+        buildmarker();
+        _mapController.animateCamera(CameraUpdate.newLatLng(LatLng(data.PositionLat, data.PositionLon)));
+      },
+    );
   }
   Future<void> update() async {
     try {
@@ -227,6 +274,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
                                                 });
                                                 for (String i in temp) array.add(busstops(i));
                                                 return ListView(
+                                                  physics: const AlwaysScrollableScrollPhysics(),
                                                   controller: scrollController,
                                                   children: array,
                                                 );
@@ -276,6 +324,22 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
               target: LatLng(25.0339, 121.5646),
               zoom: 16,
             ),
+            onCameraMove: (_position){
+              bool was = zoom < 14.0;
+              bool smaller = _position.zoom < 14.0;
+              zoom = _position.zoom;
+              if (was != smaller) {
+                buildmarker();
+              }
+            },
+            onTap: (latlng) {
+              setState(() {
+                _selected = null;
+                _busData = null;
+                _busname = null;
+              });
+              buildmarker();
+            },
             markers: _markers,
             polylines: _polylines,
             onMapCreated: (GoogleMapController controller) {
@@ -480,6 +544,8 @@ class _BusEstimateState extends State<BusEstimate> with SingleTickerProviderStat
           children: List.generate(widget.stations.length,(index) {
             final List<dynamic> route = _datas[widget.stations[index].StationID] ?? [];
             return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              controller: widget.scrollController,
               itemCount: route.length,
               itemBuilder: (context, i) {
                 return buildlisttile(route[i], colorsheme);
