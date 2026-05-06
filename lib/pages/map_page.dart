@@ -32,6 +32,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   List<dynamic> bus = [];
   List<dynamic> mrt = [];
   List<dynamic> bike = [];
+  bool init = false;
   void Merge() {
     merge = {};
     for (var item in bus) {
@@ -45,7 +46,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   @override
   void initState() {
     super.initState();
-    initicons();
     _animationController = BottomSheet.createAnimationController(this);
     _animationController.duration = Duration(milliseconds: 300);
   }
@@ -55,12 +55,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     super.dispose();
   }
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!init) {
+      init = true;
+      initicons();
+    }
+  }
   Future<void> initicons() async {
-    final icons = await Markermaker().loadicons(context);
+    final icons = await Markermaker().loadicons();
+    if(!mounted) return;
     setState(() {
       _icons = icons;
+      init = true;
     });
-    if (bus.isNotEmpty) buildmarker();
+    if (bus.isNotEmpty || bike.isNotEmpty || mrt.isNotEmpty) buildmarker();
   }
   Future<Position> _getCurrentLocation() async {
     LocationPermission permission;
@@ -419,8 +428,8 @@ class _BusEstimateState extends State<BusEstimate> with SingleTickerProviderStat
           };
           String t1 = a.NextBusTime?.toString() ?? "9999-12-31T23:59:59";
           String t2 = b.NextBusTime?.toString() ?? "9999-12-31T23:59:59";
-          if(a.StopStatus == 2 || a.StopStatus == 3 || a.StopStatus == 4) return -1;
-          if(b.StopStatus == 2 || b.StopStatus == 3 || b.StopStatus == 4) return 1;
+          if(a.StopStatus == 2 || a.StopStatus == 3 || a.StopStatus == 4) return 1;
+          if(b.StopStatus == 2 || b.StopStatus == 3 || b.StopStatus == 4) return -1;
           return t1.compareTo(t2);
         });
         _datas[i.StationID] = data;
