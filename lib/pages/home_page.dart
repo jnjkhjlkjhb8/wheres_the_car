@@ -6,7 +6,7 @@ import '../api/main.dart';
 import '../utility/update_route.dart';
 import 'package:collection/collection.dart';
 import 'package:intl/intl.dart';
-import '../api/test.dart';
+import 'dart:math';
 final Map<String, String> _cites = {
     "Taipei": "台北市",
     "NewTaipei": "新北市",
@@ -57,6 +57,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
   int currentPage = 0;
+
   @override
   Widget build(BuildContext context){
     final colorscheme = Theme.of(context).colorScheme;
@@ -278,7 +279,39 @@ class BusPage extends StatefulWidget{
   State<BusPage> createState() => _BusPageState();
 }
 class _BusPageState extends State<BusPage> {
+  bool displayFront = true;
+  bool flipXAxis = true;
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
+  Widget buildlayout(String text){
+    return Container(
+        width: 75,
+        height: 30,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6.7),
+          border: Border.all(color: Colors.grey, width: 1.67),
+        ),
+        alignment: Alignment.center,
+        child: Text(text)
+    );
+  }
+  Widget flip(Widget widget,Animation<double> animation){
+    final temp = Tween(begin: 0.0, end: pi).animate(animation);
+    return AnimatedBuilder(
+      animation: temp,
+      child: widget,
+      builder: (context, widget) {
+        final isUnder = (ValueKey(displayFront) != widget?.key);
+        var tilt = (animation.value - 0.5).abs() - 0.5;
+        tilt *= flipXAxis ? -0.003 : 0.003;
+        final value = isUnder ? min(temp.value, pi / 2) : temp.value;
+        return Transform(
+          transform: Matrix4.rotationZ(value)..setEntry(3, 0, tilt),
+          child: widget,
+          alignment: Alignment.center,
+        );
+      }
+    );
+  }
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
@@ -371,24 +404,24 @@ class _BusPageState extends State<BusPage> {
   late Future<Map<String,List<dynamic>>> _data;
   void initState(){
     super.initState();
-      Future<Map<String,List<dynamic>>> loadData() async {
-        List<dynamic> estimates =[];
-        List<dynamic> stops = [];
-        if (widget.route.City == "InterCity"){
-          String? temp = widget.route.SubRouteUID;
-          String temp2 = temp!.substring(0,temp.length-1)+"2";
-          estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
-          stops = await Tdx().getInterBusStopOfRoute(temp,temp2);
-        }
-        else{
-          estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
-          stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
-        }
-        return {
-          "estimates": estimates,
-          "stops": stops
-        };
+    Future<Map<String,List<dynamic>>> loadData() async {
+      List<dynamic> estimates =[];
+      List<dynamic> stops = [];
+      if (widget.route.City == "InterCity"){
+        String? temp = widget.route.SubRouteUID;
+        String temp2 = temp!.substring(0,temp.length-1)+"2";
+        estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
+        stops = await Tdx().getInterBusStopOfRoute(temp,temp2);
       }
+      else{
+        estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
+        stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
+      }
+      return {
+        "estimates": estimates,
+        "stops": stops
+      };
+    }
     _data = loadData();
   }
   Widget build(BuildContext context){
@@ -422,17 +455,16 @@ class _BusPageState extends State<BusPage> {
         List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
         outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
-        int tabcount = inbound.isEmpty ? 0 : 1 + (outbound.isEmpty ? 0 : 1);
         return DefaultTabController(
-          length: tabcount,
+          length: 2,
           child: Scaffold(
             appBar: AppBar(
               centerTitle: true,
               title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
               bottom: TabBar(
                 tabs: <Widget> [
-                  if(outbound.isNotEmpty) Tab(text: "往 ${widget.route.DestinationStopNameZh}"),
-                  if(inbound.isNotEmpty) Tab(text: "往 ${widget.route.DepartureStopNameZh}"),
+                  Tab(text: "路線站牌"),
+                  Tab(text: "時刻表"),
                 ],
               ),
             ),

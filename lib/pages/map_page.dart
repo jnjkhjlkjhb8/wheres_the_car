@@ -18,9 +18,11 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   static const String _Maps_API = String.fromEnvironment("GOOGLE_MAPS_API_KEY");
   final GlobalKey<NavigatorState> _busnavigatorKey = GlobalKey<NavigatorState>();
   late GoogleMapController _mapController;
-  final Set<Marker> _markers = {};
+  final Set<AdvancedMarker> _markers = {};
   final Set<Polyline> _polylines = {};
-  late AnimationController _animationController;
+  late AnimationController _bottomsheetanimationController;
+  late AnimationController dropdownanimation;
+  late Animation dropanimation;
   Map<String, BitmapDescriptor> _icons = {};
   List<dynamic>? _busData;
   Map<String,String>? _busname;
@@ -33,6 +35,7 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   List<dynamic> mrt = [];
   List<dynamic> bike = [];
   bool init = false;
+  double animeoffset = 0.0;
   void Merge() {
     merge = {};
     for (var item in bus) {
@@ -46,12 +49,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   @override
   void initState() {
     super.initState();
-    _animationController = BottomSheet.createAnimationController(this);
-    _animationController.duration = Duration(milliseconds: 300);
+    _bottomsheetanimationController = BottomSheet.createAnimationController(this);
+    _bottomsheetanimationController.duration = Duration(milliseconds: 300);
+    dropdownanimation = AnimationController(vsync: this, duration: Duration(milliseconds: 500));
+    dropanimation = Tween<double>(begin: -1.0,end: 0.0).animate(
+      CurvedAnimation(parent: dropdownanimation, curve: Curves.bounceOut),
+    )..addListener((){
+      setState(() {
+        animeoffset = dropanimation.value;
+      });
+      buildmarker();
+    });
   }
   @override
   void dispose() {
-    _animationController.dispose();
+    _bottomsheetanimationController.dispose();
     super.dispose();
   }
   @override
@@ -71,6 +83,23 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     });
     if (bus.isNotEmpty || bike.isNotEmpty || mrt.isNotEmpty) buildmarker();
   }
+  void _down(dynamic data){
+    setState(() {
+      _selected = data.StationUID;
+      _busData = merge[data.StationName['Zh_tw']];
+      _busname = data.StationName;
+    });
+    dropdownanimation.forward(from: 0.0);
+  }
+  void _up() async{
+    if(_selected != null){
+      await dropdownanimation.reverse();
+      setState(() {
+        _selected = null;
+      });
+      buildmarker();
+    }
+  }
   Future<Position> _getCurrentLocation() async {
     LocationPermission permission;
     bool yes = await Geolocator.isLocationServiceEnabled();
@@ -84,46 +113,51 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     if (permission == LocationPermission.deniedForever || !yes) {
       return Future.error('Location permissions are denied, we cannot request permissions.');
     } else {
-    return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);}
+      return Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);}
   }
   void buildmarker(){
     setState(() {
       _markers.clear();
       for (var i in bus) {
-        _markers.add(createMarker(i, _icons['Bus'],BitmapDescriptor.hueAzure));
+        _markers.add(createMarker(i, _icons['Bus'],_icons['RD']));
       }
       for (var i in mrt){
-        _markers.add(createMarker(i, _icons['BL'],BitmapDescriptor.hueBlue));
+        _markers.add(createMarker(i, _icons['BL'],_icons['BD']));
       }
       for (var i in bike){
-        _markers.add(createMarker(i, _icons['Bike'],BitmapDescriptor.hueYellow));
+        _markers.add(createMarker(i, _icons['Bike'],_icons['GD']));
       }
     });
   }
-  Marker createMarker(dynamic data,BitmapDescriptor? icon, double hue){
+  AdvancedMarker createMarker(dynamic data,BitmapDescriptor? icon,BitmapDescriptor? dot){
     final String UID = data.StationUID;
     final bool selected = _selected == UID;
     BitmapDescriptor ficon;
+    Offset anchor = selected ? Offset(0.5,1.0- animeoffset) : const Offset(0.5,0.5);
     if (selected) {
       ficon = _icons['Pegman'] ?? BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow);
     }
-    else if(zoom < 14.5){
-      ficon = BitmapDescriptor.defaultMarkerWithHue(hue);
+    else if(zoom >= 17.0){
+      ficon = icon!;
     }
     else {
-      ficon = icon ?? BitmapDescriptor.defaultMarkerWithHue(hue);
+      ficon = dot!;
     }
-    return Marker(
+    return AdvancedMarker(
       markerId: MarkerId(UID),
       position: LatLng(data.PositionLat, data.PositionLon),
       icon: ficon,
-      anchor: (zoom < 14.5 && !selected) ? Offset(0.5, 0.5) : Offset(0.5, 1.0),
+      anchor: anchor,
       onTap: () {
         setState(() {
-          _selected = UID;
-          if(hue == BitmapDescriptor.hueAzure){
-            _busData = merge[data.StationName['Zh_tw']];
-            _busname = data.StationName;
+          if (_selected == UID) return;
+          if (_selected != null){
+            dropdownanimation.reverse().then((_){
+              _down(data);
+            });
+          }
+          else {
+            _down(data);
           }
         });
         buildmarker();
@@ -198,127 +232,127 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     }
     return Scaffold(
       bottomSheet: BottomSheet(
-        animationController: _animationController,
+        animationController: _bottomsheetanimationController,
         backgroundColor: colorsheme.surface,
         enableDrag: true,
         onClosing: () {},
         builder: (context) {
           return StatefulBuilder(
-            builder: (context, setBottomSheetState) {
-              return DefaultTabController(
-                length: 3,
-                child: DraggableScrollableSheet(
-                  minChildSize: 0.1,
-                  initialChildSize: 0.4,
-                  expand: false,
-                  builder: (context, scrollController) {
-                    return Container(
-                      child: Column(
-                        children: [
-                          Container(
-                            height: 5,
-                            width: 50,
-                            margin: EdgeInsets.only(top: 8.0),
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          Expanded(
-                            child: _busData == null ?
-                            Column(
-                              children: [
-                                Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                       '何近也',
-                                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                      ),
-                                      SegmentedButton<int>(
-                                        showSelectedIcon: false,
-                                        segments: const [
-                                          ButtonSegment(value: 500, label: Text('500公尺')),
-                                          ButtonSegment(value: 750, label: Text('750公尺')),
-                                          ButtonSegment(value: 1000, label: Text('1000公尺')),
-                                        ],
-                                        selected: <int>{range},
-                                        onSelectionChanged: (Set<int> newSelection) async {
-                                          setState(() {
-                                            range = newSelection.first;
-                                          });
-                                          await update();
-                                          setBottomSheetState(() {});
-                                        },
-                                      ),
-                                    ],
+              builder: (context, setBottomSheetState) {
+                return DefaultTabController(
+                    length: 3,
+                    child: DraggableScrollableSheet(
+                      minChildSize: 0.1,
+                      initialChildSize: 0.4,
+                      expand: false,
+                      builder: (context, scrollController) {
+                        return Container(
+                            child: Column(
+                                children: [
+                                  Container(
+                                    height: 5,
+                                    width: 50,
+                                    margin: EdgeInsets.only(top: 8.0),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
                                   ),
-                                ),
-                                TabBar(
-                                  labelColor: colorsheme.primary,
-                                  tabs: [
-                                    Tab(text: '公車'),
-                                    Tab(text: '捷運 / 輕軌'),
-                                    Tab(text: '公共自行車'),
-                                  ],
-                                ),
-                                Expanded(
-                                  child: TabBarView(
-                                    children: [
-                                      Navigator(
-                                        key: _busnavigatorKey,
-                                        onGenerateRoute: (settings) {
-                                          return MaterialPageRoute(
-                                            builder: (context) => Builder(
-                                              builder: (context) {
-                                                if(merge.isEmpty) return Center(child: Text('附近沒有公車站牌'));
-                                                List<String> temp = merge.keys.toList();
-                                                List<Widget> array = [];
-                                                temp.sort((a,b){
-                                                  double distA = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[a]![0].PositionLat, merge[a]![0].PositionLon);
-                                                  double distB = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[b]![0].PositionLat, merge[b]![0].PositionLon);
-                                                  return distA.compareTo(distB);
-                                                });
-                                                for (String i in temp) array.add(busstops(i));
-                                                return ListView(
-                                                  physics: const AlwaysScrollableScrollPhysics(),
-                                                  controller: scrollController,
-                                                  children: array,
-                                                );
-                                              }
+                                  Expanded(
+                                      child: _busData == null ?
+                                      Column(
+                                        children: [
+                                          Padding(
+                                            padding: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '何近也',
+                                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                                ),
+                                                SegmentedButton<int>(
+                                                  showSelectedIcon: false,
+                                                  segments: const [
+                                                    ButtonSegment(value: 500, label: Text('500公尺')),
+                                                    ButtonSegment(value: 750, label: Text('750公尺')),
+                                                    ButtonSegment(value: 1000, label: Text('1000公尺')),
+                                                  ],
+                                                  selected: <int>{range},
+                                                  onSelectionChanged: (Set<int> newSelection) async {
+                                                    setState(() {
+                                                      range = newSelection.first;
+                                                    });
+                                                    await update();
+                                                    setBottomSheetState(() {});
+                                                  },
+                                                ),
+                                              ],
                                             ),
-                                          );
-                                        },
-                                      ),
-                                      Center(child: Text('捷運 / 輕軌資訊')),
-                                      Center(child: Text('公共自行車資訊')),
-                                    ],
+                                          ),
+                                          TabBar(
+                                            labelColor: colorsheme.primary,
+                                            tabs: [
+                                              Tab(text: '公車'),
+                                              Tab(text: '捷運 / 輕軌'),
+                                              Tab(text: '公共自行車'),
+                                            ],
+                                          ),
+                                          Expanded(
+                                            child: TabBarView(
+                                              children: [
+                                                Navigator(
+                                                  key: _busnavigatorKey,
+                                                  onGenerateRoute: (settings) {
+                                                    return MaterialPageRoute(
+                                                      builder: (context) => Builder(
+                                                          builder: (context) {
+                                                            if(merge.isEmpty) return Center(child: Text('附近沒有公車站牌'));
+                                                            List<String> temp = merge.keys.toList();
+                                                            List<Widget> array = [];
+                                                            temp.sort((a,b){
+                                                              double distA = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[a]![0].PositionLat, merge[a]![0].PositionLon);
+                                                              double distB = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[b]![0].PositionLat, merge[b]![0].PositionLon);
+                                                              return distA.compareTo(distB);
+                                                            });
+                                                            for (String i in temp) array.add(busstops(i));
+                                                            return ListView(
+                                                              physics: const AlwaysScrollableScrollPhysics(),
+                                                              controller: scrollController,
+                                                              children: array,
+                                                            );
+                                                          }
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                                Center(child: Text('捷運 / 輕軌資訊')),
+                                                Center(child: Text('公共自行車資訊')),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ) :
+                                      BusEstimate(
+                                          key: ValueKey(_busname!['Zh_tw']),
+                                          stationName: _busname!,
+                                          stations: _busData!,
+                                          scrollController: scrollController,
+                                          onBack: () {
+                                            setState(() {
+                                              _busData = null;
+                                              _busname = null;
+                                            });
+                                          }
+                                      )
                                   ),
-                                ),
-                              ],
-                            ) :
-                            BusEstimate(
-                              key: ValueKey(_busname!['Zh_tw']),
-                              stationName: _busname!,
-                              stations: _busData!,
-                              scrollController: scrollController,
-                              onBack: () {
-                                setState(() {
-                                  _busData = null;
-                                  _busname = null;
-                                });
-                              }
+                                ]
                             )
-                          ),
-                        ]
-                      )
-                    );
-                  },
-                )
-              );
-            }
+                        );
+                      },
+                    )
+                );
+              }
           );
         },
       ),
@@ -334,20 +368,21 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
               zoom: 16,
             ),
             onCameraMove: (_position){
-              bool was = zoom < 14.0;
-              bool smaller = _position.zoom < 14.0;
               zoom = _position.zoom;
-              if (was != smaller) {
+            },
+            onCameraIdle: (){
+              buildmarker();
+            },
+            onTap: (latlng) async{
+              if(_selected != null) {
+                await dropdownanimation.reverse();
+                setState(() {
+                  _selected = null;
+                  _busData = null;
+                  _busname = null;
+                });
                 buildmarker();
               }
-            },
-            onTap: (latlng) {
-              setState(() {
-                _selected = null;
-                _busData = null;
-                _busname = null;
-              });
-              buildmarker();
             },
             markers: _markers,
             polylines: _polylines,
@@ -512,57 +547,66 @@ class _BusEstimateState extends State<BusEstimate> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     final ColorScheme colorsheme = Theme.of(context).colorScheme;
     return DefaultTabController(
-      length: widget.stations.length,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          primary: false,
-          automaticallyImplyLeading: false,
-          title: Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded),
-                onPressed: widget.onBack,
-              ),
-              Expanded(
-                child: Text(
-                  widget.stationName['Zh_tw'] ?? 'Error',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              )
-            ],
-          ),
-          bottom: PreferredSize(
-            preferredSize: Size.fromHeight(48.0),
-            child: Column(
+        length: widget.stations.length,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            primary: false,
+            automaticallyImplyLeading: false,
+            title: Row(
               children: [
-                if (refresh) LinearProgressIndicator(color: colorsheme.primary,minHeight: 2.0)
-                else const SizedBox.shrink(),
-                TabBar(
-                  labelColor: colorsheme.primary,
-                  isScrollable: widget.stations.length > 3,
-                  tabs: List.generate(widget.stations.length,(index){
-                    return Tab(text: widget.stations[index].Bearing ?? String.fromCharCode(65 + index));
-                  }),
+                IconButton(
+                  icon: Icon(Icons.arrow_back_ios_new_rounded),
+                  onPressed: widget.onBack,
                 ),
+                Expanded(
+                  child: Text(
+                    widget.stationName['Zh_tw'] ?? 'Error',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                )
               ],
             ),
+            bottom: PreferredSize(
+              preferredSize: Size.fromHeight(50.0),
+              child: Stack(
+                alignment: Alignment.bottomCenter,
+                children: [
+                  TabBar(
+                    labelColor: colorsheme.primary,
+                    isScrollable: widget.stations.length > 3,
+                    tabs: List.generate(widget.stations.length,(index){
+                      return Tab(text: widget.stations[index].Bearing ?? String.fromCharCode(65 + index));
+                    }),
+                  ),
+                  AnimatedBuilder(animation: _animationController, builder:
+                      (context, child) {
+                    return LinearProgressIndicator(
+                      value: refresh ? null : (1.0-_animationController.value),
+                      color: refresh ? colorsheme.secondary : colorsheme.primary,
+                      minHeight: 3.0,
+                      backgroundColor: Colors.transparent,
+                    );
+                  }
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        body: TabBarView(
-          children: List.generate(widget.stations.length,(index) {
-            final List<dynamic> route = _datas[widget.stations[index].StationID] ?? [];
-            return ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              controller: widget.scrollController,
-              itemCount: route.length,
-              itemBuilder: (context, i) {
-                return buildlisttile(route[i], colorsheme);
-              },
-            );
-          }),
-        ),
-      )
+          body: TabBarView(
+            children: List.generate(widget.stations.length,(index) {
+              final List<dynamic> route = _datas[widget.stations[index].StationID] ?? [];
+              return ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                controller: widget.scrollController,
+                itemCount: route.length,
+                itemBuilder: (context, i) {
+                  return buildlisttile(route[i], colorsheme);
+                },
+              );
+            }),
+          ),
+        )
     );
   }
 }
