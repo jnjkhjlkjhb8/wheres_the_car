@@ -21,7 +21,7 @@ class UpdateRoute{
     final String? lastFetchTime = db.getData('lastFetchTime');
     if (cachedData == null || lastFetchTime != today) {
       try {
-        final response = await _dio.get("?token=GHSAT0AAAAAADRRESMWGCMTIS73NEEJGCEC2PQZZ3A");
+        final response = await _dio.get("?token=GHSAT0AAAAAADRRESMWENP53YKRH3PF747W2P4ZTTQ");
         if (response.statusCode == 200) {
           String string = (response.data is String) ? response.data : jsonEncode(response.data);
           db.saveData('cachedRoutes', string);

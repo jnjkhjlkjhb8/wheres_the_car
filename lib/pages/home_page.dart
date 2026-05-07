@@ -279,39 +279,7 @@ class BusPage extends StatefulWidget{
   State<BusPage> createState() => _BusPageState();
 }
 class _BusPageState extends State<BusPage> {
-  bool displayFront = true;
-  bool flipXAxis = true;
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
-  Widget buildlayout(String text){
-    return Container(
-        width: 75,
-        height: 30,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6.7),
-          border: Border.all(color: Colors.grey, width: 1.67),
-        ),
-        alignment: Alignment.center,
-        child: Text(text)
-    );
-  }
-  Widget flip(Widget widget,Animation<double> animation){
-    final temp = Tween(begin: 0.0, end: pi).animate(animation);
-    return AnimatedBuilder(
-      animation: temp,
-      child: widget,
-      builder: (context, widget) {
-        final isUnder = (ValueKey(displayFront) != widget?.key);
-        var tilt = (animation.value - 0.5).abs() - 0.5;
-        tilt *= flipXAxis ? -0.003 : 0.003;
-        final value = isUnder ? min(temp.value, pi / 2) : temp.value;
-        return Transform(
-          transform: Matrix4.rotationZ(value)..setEntry(3, 0, tilt),
-          child: widget,
-          alignment: Alignment.center,
-        );
-      }
-    );
-  }
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
@@ -424,6 +392,57 @@ class _BusPageState extends State<BusPage> {
     }
     _data = loadData();
   }
+  int index = 0;
+  Widget flip(){
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      child: AnimatedSwitcher(
+        duration: Duration(milliseconds: 500),
+        transitionBuilder: (Widget child,Animation<double> animation) {
+            final temp = Tween(begin: pi, end: 0.0).animate(animation);
+            return AnimatedBuilder(
+              animation: temp,
+              child: child,
+              builder: (context, child) {
+                final isUnder = temp.value > pi /2;
+                var tilt = ((temp.value - 0.5).abs() - 0.5) * 0.003;
+                tilt *= isUnder ? -1.0 : 1.0;
+                final value = isUnder ? min(temp.value, pi / 2) : temp.value;
+                return Transform(
+                  transform: Matrix4.rotationY(value)
+                    ..setEntry(3, 0, tilt),
+                  alignment: Alignment.center,
+                  child: child,
+                );
+              }
+          );
+        },
+        child: Card.outlined(
+          key: ValueKey(index),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap:(){
+              if (index == -1) return;
+              setState(() {
+                index = 1 - index;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(index == 1 ? widget.route.DestinationStopNameZh ?? "error" : widget.route.DepartureStopNameZh ?? "error",style: TextStyle(fontWeight: FontWeight.bold,fontSize: 20)),
+                  Icon(Icons.arrow_forward_rounded),
+                  Text(index == 1 ? widget.route.DepartureStopNameZh ?? "error" : widget.route.DestinationStopNameZh ?? "error",style: TextStyle(fontWeight: FontWeight.bold,fontSize: 20)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   Widget build(BuildContext context){
     return FutureBuilder<Map<String,List<dynamic>>>(
       future: _data,
@@ -455,6 +474,7 @@ class _BusPageState extends State<BusPage> {
         List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
         outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
         inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
+        final display = index == -1 || index == 0 ? inbound : outbound;
         return DefaultTabController(
           length: 2,
           child: Scaffold(
@@ -470,14 +490,18 @@ class _BusPageState extends State<BusPage> {
             ),
             body: TabBarView(
               children: [
-                if (inbound.isNotEmpty) ListView.builder(
-                  itemCount: inbound.length,
-                  itemBuilder: (context, index) => buildlisttile(inbound[index],stopMap[inbound[index].StopUID],colorscheme, index == 0, index == inbound.length - 1),
+                Column(
+                  children: [
+                    flip(),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: display.length,
+                        itemBuilder: (context, index) => buildlisttile(display[index],stopMap[display[index].StopUID],colorscheme, index == 0, index == display.length - 1),
+                      )
+                    )
+                  ],
                 ),
-                if (outbound.isNotEmpty) ListView.builder(
-                  itemCount: outbound.length,
-                  itemBuilder: (context, index) => buildlisttile(outbound[index],stopMap[outbound[index].StopUID] ,colorscheme, index == 0, index == outbound.length - 1),
-                ),
+                const Center(child: Text("時刻表")),
               ]
             ),
           )
