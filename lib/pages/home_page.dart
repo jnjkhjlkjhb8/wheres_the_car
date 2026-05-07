@@ -367,8 +367,6 @@ class _BusPageState extends State<BusPage> {
       ),
     );
   }
-  //late Future<List<dynamic>> estimates = widget.route.City == "InterCity" ? Tdx().getInterBusEstimatedTimeOfArrival(widget.route.RouteUID) : Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
-  //late Future<List<dynamic>> StopOfRoute = widget.route.City == "InterCity" ? Tdx().getInterBusStopOfRoute(widget.route.RouteUID) : Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
   late Future<Map<String,List<dynamic>>> _data;
   void initState(){
     super.initState();
@@ -393,7 +391,7 @@ class _BusPageState extends State<BusPage> {
     _data = loadData();
   }
   int index = 0;
-  Widget flip(){
+  Widget flip(){ // 參考 https://medium.com/flutter-community/flutter-flip-card-animation-eb25c403f371
     return Container(
       padding: const EdgeInsets.all(8.0),
       child: AnimatedSwitcher(
