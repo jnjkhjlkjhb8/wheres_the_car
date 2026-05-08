@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:bus/data/DailyRoute.dart';
 import 'package:flutter/material.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
@@ -278,8 +279,12 @@ class BusPage extends StatefulWidget{
   @override
   State<BusPage> createState() => _BusPageState();
 }
-class _BusPageState extends State<BusPage> {
+class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
+  bool refresh = false;
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
+  late AnimationController _animationController;
+  late Map<String,List<dynamic>> _data = {"estimates": [],"stops": []};
+  Timer? _timer;
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
@@ -361,18 +366,26 @@ class _BusPageState extends State<BusPage> {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-            ),  
+            ),
           ],
         )
       ),
     );
   }
-  late Future<Map<String,List<dynamic>>> _data;
   void initState(){
     super.initState();
-    Future<Map<String,List<dynamic>>> loadData() async {
-      List<dynamic> estimates =[];
-      List<dynamic> stops = [];
+    _animationController = AnimationController(vsync: this,duration: const Duration(seconds: 15));
+    _fetchData();
+    update();
+  }
+  bool loading = true;
+  Future<void> _fetchData() async{
+    setState(() {
+      refresh = true;
+    });
+    List<dynamic> estimates =[];
+    List<dynamic> stops = [];
+    try {
       if (widget.route.City == "InterCity"){
         String? temp = widget.route.SubRouteUID;
         String temp2 = temp!.substring(0,temp.length-1)+"2";
@@ -383,12 +396,66 @@ class _BusPageState extends State<BusPage> {
         estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
         stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
       }
-      return {
-        "estimates": estimates,
-        "stops": stops
-      };
+      _data["estimates"] = estimates;
+      _data["stops"] = stops;
+      loading = false;
+      return;
+    } catch (e) {
+      refresh = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('error take: $e')),
+      );
+      rethrow;
+    } finally {
+      if(mounted) setState(() {
+        refresh = false;
+      });
+      refresh = false;
     }
-    _data = loadData();
+  }
+  Future<void> getdata() async {
+    if(refresh || loading) return;
+    setState(() {
+      refresh = true;
+    });
+    List<dynamic> estimates =[];
+    try {
+      if (widget.route.City == "InterCity"){
+        String? temp = widget.route.SubRouteUID;
+        String temp2 = temp!.substring(0,temp.length-1)+"2";
+        estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
+      }
+      else{
+        estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
+      }
+      if(mounted){
+        setState(() {
+          _data["estimates"] = estimates;
+        });
+      }
+    } catch (e) {
+      refresh = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('error take: $e')),
+      );
+      rethrow;
+    } finally {
+      if(mounted) setState(() {
+        refresh = false;
+      });
+      refresh = false;
+    }
+  }
+  void dispose(){
+    _animationController.dispose();
+    _timer?.cancel();
+    super.dispose();
+  }
+  void update() {
+    _animationController.repeat();
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      getdata();
+    });
   }
   int index = 0;
   Widget flip(){ // 參考 https://medium.com/flutter-community/flutter-flip-card-animation-eb25c403f371
@@ -442,69 +509,74 @@ class _BusPageState extends State<BusPage> {
     );
   }
   Widget build(BuildContext context){
-    return FutureBuilder<Map<String,List<dynamic>>>(
-      future: _data,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Scaffold(
-            appBar: AppBar(
-              centerTitle: true,
-              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
-            ),
-            body: Center(child: Text("發生錯誤, ${snapshot.error}",style: const TextStyle(fontWeight: FontWeight.bold))),
-          );
-        }
-        if (!snapshot.hasData){
-          return Scaffold(
-            appBar: AppBar(
-              centerTitle: true,
-              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
-            ),
-            body: const Center(child: CircularProgressIndicator()),
-          );
-        }
-        final List<dynamic> estimate = snapshot.data?["estimates"] ?? [];
-        final List<dynamic> stop = snapshot.data?["stops"] ?? [];
-        final Map<String,dynamic> stopMap ={
-          for (var i in estimate) i.StopUID: i
-        };
-        List<dynamic> inbound = stop.firstWhereOrNull((element) => element.Direction == 0)?.Stops ?? [];
-        List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
-        outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
-        inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
-        final display = index == -1 || index == 0 ? inbound : outbound;
-        return DefaultTabController(
-          length: 2,
-          child: Scaffold(
-            appBar: AppBar(
-              centerTitle: true,
-              title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
-              bottom: TabBar(
-                tabs: <Widget> [
-                  Tab(text: "路線站牌"),
-                  Tab(text: "時刻表"),
-                ],
-              ),
-            ),
-            body: TabBarView(
+    if (loading){
+      return Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30,fontWeight: FontWeight.bold)),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final List<dynamic> estimate = _data["estimates"] ?? [];
+    final List<dynamic> stop = _data["stops"] ?? [];
+    final Map<String,dynamic> stopMap ={
+      for (var i in estimate) i.StopUID: i
+    };
+    List<dynamic> inbound = stop.firstWhereOrNull((element) => element.Direction == 0)?.Stops ?? [];
+    List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
+    outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
+    inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
+    final display = index == -1 || index == 0 ? inbound : outbound;
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          centerTitle: true,
+          title: Text(widget.route.SubRouteName, style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+          bottom: PreferredSize(
+            preferredSize: Size.fromHeight(50.0),
+            child: Stack(
+              alignment: Alignment.bottomCenter,
               children: [
-                Column(
-                  children: [
-                    flip(),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: display.length,
-                        itemBuilder: (context, index) => buildlisttile(display[index],stopMap[display[index].StopUID],colorscheme, index == 0, index == display.length - 1),
-                      )
-                    )
+                TabBar(
+                  labelColor: colorscheme.primary,
+                  tabs: <Widget> [
+                    Tab(text: "路線站牌"),
+                    Tab(text: "時刻表"),
                   ],
                 ),
-                const Center(child: Text("時刻表")),
-              ]
+                AnimatedBuilder(animation: _animationController, builder:
+                    (context, child) {
+                  return LinearProgressIndicator(
+                    value: refresh ? null : (1.0-_animationController.value),
+                    color: refresh ? colorscheme.secondary : colorscheme.primary,
+                    minHeight: 3.0,
+                    backgroundColor: Colors.transparent,
+                  );
+                }
+                ),
+              ],
             ),
-          )
-        );
-      }
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            Column(
+              children: [
+                flip(),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: display.length,
+                    itemBuilder: (context, index) => buildlisttile(display[index],stopMap[display[index].StopUID],colorscheme, index == 0, index == display.length - 1),
+                  )
+                )
+              ],
+            ),
+            const Center(child: Text("時刻表")),
+          ]
+        ),
+      )
     );
   }
 }
