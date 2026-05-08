@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:bus/data/BusDaily.dart';
 import 'package:bus/data/BusNear.dart';
+import 'package:bus/data/BusS2S.dart';
 import 'package:bus/data/BusStationEstimateTime.dart';
 import 'package:bus/data/MetroFirstLastTimetable.dart';
 import 'package:bus/data/MetroLiveBoard.dart';
@@ -215,6 +217,126 @@ class Tdx{
       if(e.response?.statusCode == 401){
         await getToken();
         return getBusShape(route);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getBusDailyTable(String route,String City) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/City/$City",
+          queryParameters: {
+            '\$select': "BusDate,RouteUID,SubRouteUID,SubRouteName,Direction,Timetables",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return BusDailyTimeTableFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBusDailyTable(route,City);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getInterBusDailyTable(String route) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/InterCity",
+          queryParameters: {
+            '\$select': "BusDate,RouteUID,SubRouteUID,SubRouteName,Direction,Timetables",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return BusDailyTimeTableFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getInterBusDailyTable(route);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getBusS2S(String route,String City,String ID) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/basic/v2/S2STravlTime/City/$City/$ID",
+          queryParameters: {
+            '\$select': "RouteUID,SubRouteUID,SubRouteID,Direction,TravelTimes",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return busS2SFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBusS2S(route,City,ID);
+      }
+      rethrow;
+    }
+  }
+  Future<Object> getInterBusS2S(String route,String ID) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/basic/v2/S2STravlTime/InterCity/$ID",
+          queryParameters: {
+            '\$select': "RouteUID,SubRouteUID,SubRouteID,Direction,TravelTimes",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return busS2SFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getInterBusS2S(route,ID);
       }
       rethrow;
     }

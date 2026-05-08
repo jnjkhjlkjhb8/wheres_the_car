@@ -543,7 +543,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                   labelColor: colorscheme.primary,
                   tabs: <Widget> [
                     Tab(text: "路線站牌"),
-                    Tab(text: "時刻表"),
+                    widget.route.City != 'Taipei' || widget.route.City != 'NewTaipei' ? Tab(text: "今日班表") : Tab(text: "班表"),
                   ],
                 ),
                 AnimatedBuilder(animation: _animationController, builder:
