@@ -24,8 +24,8 @@ import '../data/MetroNear.dart';
 import '../data/BikeNear.dart';
 
 class Tdx{
-  Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
-  Database _db = Database();
+  final Dio _dio = Dio()..interceptors.add(PrettyDioLogger());
+  final Database _db = Database();
   late String _accesstoken;
   static const String _CilentID = String.fromEnvironment("TDX_CLIENT_ID"); // API 位置
   static const String _CilentSecret = String.fromEnvironment("TDX_CLIENT_SECRET"); // API 位置
@@ -73,8 +73,11 @@ class Tdx{
       );
       if(response.statusCode == 200){
         _accesstoken = response.data["access_token"];
-        if (Database().getData("token") == null) Database().saveData("token", _accesstoken);
-        else Database().updateData("token", _accesstoken);
+        if (Database().getData("token") == null) {
+          Database().saveData("token", _accesstoken);
+        } else {
+          Database().updateData("token", _accesstoken);
+        }
         print("get token: $_accesstoken");
         return _accesstoken;
       }else{
@@ -221,7 +224,7 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getBusDailyTable(String route,String City) async{
+  Future<List<BusDailyTimeTable>> getBusDailyTable(String route,String City) async{
     try{
       Response response = await _dio.get(
           "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/City/$City",
@@ -251,7 +254,7 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getInterBusDailyTable(String route) async{
+  Future<List<BusDailyTimeTable>> getInterBusDailyTable(String route) async{
     try{
       Response response = await _dio.get(
           "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/InterCity",
@@ -281,7 +284,7 @@ class Tdx{
       rethrow;
     }
   }
-  Future<Object> getBusS2S(String route,String City,String ID) async{
+  Future<List<BusS2S>> getBusS2S(String route,String City,String ID) async{
     try{
       Response response = await _dio.get(
           "https://tdx.transportdata.tw/api/basic/v2/S2STravlTime/City/$City/$ID",
@@ -347,7 +350,7 @@ class Tdx{
         "https://tdx.transportdata.tw/api/advanced/v2/Bus/Station/NearBy",
           queryParameters: {
             '\$select': "StationUID,StationID,StationName,StationPosition,StationGroupID,Bearing,LocationCityCode,UpdateTime,Stops",
-            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$spatialFilter': "nearby($Lat,$Lon,$range)",
             '\$format': 'JSON',
           },
         options: Options(
@@ -377,7 +380,7 @@ class Tdx{
           "https://tdx.transportdata.tw/api/advanced/v2/Rail/Metro/Station/NearBy",
           queryParameters: {
             '\$select': "StationPosition,LocationCity,StationUID,StationName",
-            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$spatialFilter': "nearby($Lat,$Lon,$range)",
             '\$format': 'JSON',
           },
           options: Options(
@@ -408,7 +411,7 @@ class Tdx{
           "https://tdx.transportdata.tw/api/advanced/v2/Bike/Station/NearBy",
           queryParameters: {
             '\$select': "StationUID,StationName,StationPosition,BikesCapacity,ServiceType",
-            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$spatialFilter': "nearby($Lat,$Lon,$range)",
             '\$format': 'JSON',
           },
           options: Options(
@@ -422,7 +425,7 @@ class Tdx{
           "https://tdx.transportdata.tw/api/advanced/v2/Bike/Availability/NearBy",
           queryParameters: {
             '\$select': "StationUID,ServiceStatus,AvailableReturnBikes,AvailableRentBikesDetail,SrcUpdateTime",
-            '\$spatialFilter': "nearby(${Lat},${Lon},${range})",
+            '\$spatialFilter': "nearby($Lat,$Lon,$range)",
             '\$format': 'JSON',
           },
           options: Options(
@@ -468,7 +471,7 @@ class Tdx{
   Future<Object> getBusPositionByStation(String City,String StationUID) async{
     try{
       Response response = await _dio.get(
-        "https://tdx.transportdata.tw/api/advanced/v2/Bus/RealTimeByFrequency/City/${_cites[City]!}/PassThrough/Station/${StationUID}",
+        "https://tdx.transportdata.tw/api/advanced/v2/Bus/RealTimeByFrequency/City/${_cites[City]!}/PassThrough/Station/$StationUID",
         queryParameters: {
           '\$select': "PlateNumb,SubRouteUID,SubRouteName,BusPosition,Speed,Azimuth,BusStatus,GPSTime",
           '\$format': 'JSON',
@@ -501,7 +504,7 @@ class Tdx{
     }
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/City/${city}/PassThrough/Station/${StationUID}",
+          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/City/$city/PassThrough/Station/$StationUID",
           queryParameters: {
             '\$select': "PlateNumb,SubRouteUID,SubRouteName,EstimateTime,ScheduledTime,DestinationStop,StopStatus,NextBusTime,IsLastBus,Estimates,UpdateTime",
             '\$format': 'JSON',
@@ -530,7 +533,7 @@ class Tdx{
   Future<List<BusN1EstimateTime>> getInterBusEstimateByStation(String StationUID) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/InterCity/PassThrough/Station/${StationUID}",
+          "https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/InterCity/PassThrough/Station/$StationUID",
           queryParameters: {
             '\$select': "PlateNumb,SubRouteUID,SubRouteName,EstimateTime,ScheduledTime,DestinationStop,StopStatus,NextBusTime,IsLastBus,Estimates,UpdateTime",
             '\$format': 'JSON',

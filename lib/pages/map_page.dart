@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:google_maps_utils/google_maps_utils.dart';
 import 'package:geolocator/geolocator.dart';
 import '../api/main.dart';
 import 'dart:async';
@@ -315,7 +313,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
                                                               double distB = Geolocator.distanceBetween(_position!.latitude, _position!.longitude, merge[b]![0].PositionLat, merge[b]![0].PositionLon);
                                                               return distA.compareTo(distB);
                                                             });
-                                                            for (String i in temp) array.add(busstops(i));
+                                                            for (String i in temp) {
+                                                              array.add(busstops(i));
+                                                            }
                                                             return ListView(
                                                               physics: const AlwaysScrollableScrollPhysics(),
                                                               controller: scrollController,
@@ -367,8 +367,8 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
               target: LatLng(25.0339, 121.5646),
               zoom: 16,
             ),
-            onCameraMove: (_position){
-              zoom = _position.zoom;
+            onCameraMove: (position){
+              zoom = position.zoom;
             },
             onCameraIdle: (){
               buildmarker();
@@ -423,7 +423,7 @@ class _BusEstimateState extends State<BusEstimate> with SingleTickerProviderStat
   Timer? _timer;
   bool refresh = false;
   bool fetch = false;
-  Map<String,List<dynamic>> _datas = {};
+  final Map<String,List<dynamic>> _datas = {};
   late AnimationController _animationController;
   @override
   void initState() {
@@ -460,7 +460,7 @@ class _BusEstimateState extends State<BusEstimate> with SingleTickerProviderStat
         data.sort((a, b) {
           if (a.EstimateTime != null && b.EstimateTime != null) {
             return a.EstimateTime!.compareTo(b.EstimateTime!);
-          };
+          }
           String t1 = a.NextBusTime?.toString() ?? "9999-12-31T23:59:59";
           String t2 = b.NextBusTime?.toString() ?? "9999-12-31T23:59:59";
           if(a.StopStatus == 2 || a.StopStatus == 3 || a.StopStatus == 4) return 1;

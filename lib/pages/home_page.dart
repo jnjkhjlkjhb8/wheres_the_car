@@ -99,8 +99,9 @@ class _HomePageState extends State<HomePage> {
               child: FutureBuilder<List<Favorite>>(
                 future: getFavorites(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-                  else if (snapshot.hasError) return const Center(child: Text('發生錯誤，無法載入最愛路線',style: TextStyle(fontWeight: FontWeight.bold)));
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  } else if (snapshot.hasError) return const Center(child: Text('發生錯誤，無法載入最愛路線',style: TextStyle(fontWeight: FontWeight.bold)));
                   else if (snapshot.data!.isEmpty) return const Center(child: Text('尚未新增過任何東西',style: TextStyle(fontWeight: FontWeight.bold)));
                   else {
                     final favorites = snapshot.data!;
@@ -207,7 +208,7 @@ class _HomePageState extends State<HomePage> {
                                       await recent().del(route.RouteUID);
                                       setState(() {});
                                       String temp = controller.text;
-                                      controller.text = controller.text+" ";
+                                      controller.text = "${controller.text} ";
                                       controller.text = temp;
                                       Navigator.pop(context);
                                     },
@@ -232,14 +233,17 @@ class _HomePageState extends State<HomePage> {
                     )).toList();
                   }
                   final foundRoutes = allRoutes.where((route){
-                    if(!route.SubRouteName.contains(input)) return false;
-                    else if (route.City == "InterCity" && route.SubRouteUID!.endsWith('2')) return false;
+                    if(!route.SubRouteName.contains(input)) {
+                      return false;
+                    } else if (route.City == "InterCity" && route.SubRouteUID!.endsWith('2')) return false;
                     return route.SubRouteName.contains(input);
                   }).toList();
                   if (foundRoutes.isEmpty) return [const ListTile(title: Text("沒有找到相關路線"))];
                   Map<String, List<Routes>> city = {};
                   List<Widget> Display = [];
-                  for (var route in foundRoutes) city.putIfAbsent(route.City, () => []).add(route);
+                  for (var route in foundRoutes) {
+                    city.putIfAbsent(route.City, () => []).add(route);
+                  }
                   city.forEach((cityKey, routes) {
                     Display.add(
                       Padding(
@@ -283,7 +287,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
   bool refresh = false;
   ColorScheme get colorscheme => Theme.of(context).colorScheme;
   late AnimationController _animationController;
-  late Map<String,List<dynamic>> _data = {"estimates": [],"stops": []};
+  late final Map<String,List<dynamic>> _data = {"estimates": [],"stops": []};
   Timer? _timer;
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
@@ -372,6 +376,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       ),
     );
   }
+  @override
   void initState(){
     super.initState();
     _animationController = AnimationController(vsync: this,duration: const Duration(seconds: 15));
@@ -385,19 +390,25 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     });
     List<dynamic> estimates =[];
     List<dynamic> stops = [];
+    List<dynamic> schedules = [];
+    List<dynamic> S2S = [];
     try {
       if (widget.route.City == "InterCity"){
         String? temp = widget.route.SubRouteUID;
-        String temp2 = temp!.substring(0,temp.length-1)+"2";
+        String temp2 = "${temp!.substring(0,temp.length-1)}2";
         estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
         stops = await Tdx().getInterBusStopOfRoute(temp,temp2);
       }
       else{
         estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
         stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
+        schedules = await Tdx().getBusDailyTable(widget.route.SubRouteUID!, widget.route.City);
+        S2S = await Tdx().getBusS2S(widget.route.SubRouteUID!, widget.route.City,widget.route.RouteID!);
       }
       _data["estimates"] = estimates;
       _data["stops"] = stops;
+      _data["S2S"] = S2S;
+      _data["schedules"] = schedules;
       loading = false;
       return;
     } catch (e) {
@@ -407,9 +418,11 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       );
       rethrow;
     } finally {
-      if(mounted) setState(() {
+      if(mounted) {
+        setState(() {
         refresh = false;
       });
+      }
       refresh = false;
     }
   }
@@ -422,7 +435,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     try {
       if (widget.route.City == "InterCity"){
         String? temp = widget.route.SubRouteUID;
-        String temp2 = temp!.substring(0,temp.length-1)+"2";
+        String temp2 = "${temp!.substring(0,temp.length-1)}2";
         estimates = await Tdx().getInterBusEstimatedTimeOfArrival(temp,temp2);
       }
       else{
@@ -440,12 +453,15 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       );
       rethrow;
     } finally {
-      if(mounted) setState(() {
+      if(mounted) {
+        setState(() {
         refresh = false;
       });
+      }
       refresh = false;
     }
   }
+  @override
   void dispose(){
     _animationController.dispose();
     _timer?.cancel();
@@ -508,6 +524,19 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       ),
     );
   }
+  Widget buildStation(dynamic station,bool selected){
+    return ListTile(
+      title: Text(station.StopName?["Zh_tw"] ?? "",style: TextStyle(fontWeight: FontWeight.bold)),
+      tileColor: selected ? colorscheme.primary : colorscheme.surface,
+    );
+  }
+  Widget buildTime(DateTime time,int S2S){
+    DateTime temp = time.add(Duration(minutes: S2S));
+    return ListTile(
+      title: Text("${temp.hour.toString()} : ${temp.minute.toString()}",style: TextStyle(fontWeight: FontWeight.bold)),
+    );
+  }
+  @override
   Widget build(BuildContext context){
     if (loading){
       return Scaffold(
@@ -520,14 +549,23 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     }
     final List<dynamic> estimate = _data["estimates"] ?? [];
     final List<dynamic> stop = _data["stops"] ?? [];
+    final List<dynamic> S2S = _data["S2S"] ?? [];
+    final List<dynamic> schedule = _data["schedule"] ?? [];
     final Map<String,dynamic> stopMap ={
       for (var i in estimate) i.StopUID: i
+    };
+    final Map<String,dynamic> scheduleMap = {
+      for (var i in schedule) i.StopUID: i
+    };
+    final Map<String,dynamic> S2SMap = {
+      for (var i in S2S) i.StopUID: i
     };
     List<dynamic> inbound = stop.firstWhereOrNull((element) => element.Direction == 0)?.Stops ?? [];
     List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
     outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     final display = index == -1 || index == 0 ? inbound : outbound;
+    int select = 0;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -543,7 +581,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                   labelColor: colorscheme.primary,
                   tabs: <Widget> [
                     Tab(text: "路線站牌"),
-                    widget.route.City != 'Taipei' || widget.route.City != 'NewTaipei' ? Tab(text: "今日班表") : Tab(text: "班表"),
+                    widget.route.City != 'Taipei' && widget.route.City != 'NewTaipei' ? Tab(text: "今日班表") : Tab(text: "班表"),
                   ],
                 ),
                 AnimatedBuilder(animation: _animationController, builder:
@@ -573,8 +611,54 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                 )
               ],
             ),
-            const Center(child: Text("時刻表")),
-          ]
+            Column(
+              children: [
+                flip(),
+                Expanded(
+                  child: Row(
+                    children:[
+                      Expanded(
+                          child: Column(
+                            children: [
+                              Text("站牌",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              Row(
+                                children: [
+                                  ListView.builder(
+                                    itemCount: display.length,
+                                    itemBuilder: (context, index) => buildStation(display[index], index == select),
+                                  ),
+                                  RotatedBox(
+                                    quarterTurns: 3,
+                                    child: SliderTheme(
+                                      data: SliderTheme.of(context).copyWith(
+                                        trackHeight: 0,
+                                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10),
+                                      ),
+                                      child: Slider(
+                                        value: select.toDouble(),
+                                        min: 0,
+                                        max: (display.length - 1).toDouble(),
+                                        divisions: display.length - 1,
+                                        onChanged: (value) {
+                                          setState(() {
+                                            select = value.toInt();
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ]
+                              )
+                            ],
+                          )),
+                      Container(width: 1.67, height: double.infinity, color: Colors.grey[400], margin: EdgeInsets.symmetric(horizontal: 8)),
+                      Expanded(child: Text("發車時間",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          ],
         ),
       )
     );

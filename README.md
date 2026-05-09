@@ -21,6 +21,14 @@
 票價查詢及時刻表. 
 擁擠程度. --待考慮
 後端程式轉移到firebase?
+slider
+home page
+bottom
+XXXXXXX
+X X X X
+X X X X
+X X X X
+XXXXXXX
 
 ## Completed
 路線查詢 --week1. 
@@ -31,3 +39,8 @@ Daily Update Routes --week1.
 
 基隆202路線出現資料錯誤（可能因動態發車）. 
 ~~公總資料或許因沒給NextBusTime造成到站時間顯示錯誤. ~~
+
+# Backend server
+gRPC
+golang
+sql? radis?

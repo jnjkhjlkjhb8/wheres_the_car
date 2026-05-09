@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 List<MetroNear> MetroNearFromJson(dynamic data) {
-  if (data is String) return List<MetroNear>.from(json.decode(data).map((x) => MetroNear.fromJson(x)));
-  else if (data is List) return List<MetroNear>.from(data.map((x) => MetroNear.fromJson(x)));
+  if (data is String) {
+    return List<MetroNear>.from(json.decode(data).map((x) => MetroNear.fromJson(x)));
+  } else if (data is List) return List<MetroNear>.from(data.map((x) => MetroNear.fromJson(x)));
   return [];
 }
 

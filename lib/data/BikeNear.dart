@@ -1,13 +1,15 @@
 import 'dart:convert';
 
 List<Bikenear> BikenearFromJson(dynamic data) {
-  if (data is String) return List<Bikenear>.from(json.decode(data).map((x) => Bikenear.fromJson(x)));
-  else if (data is List) return List<Bikenear>.from(data.map((x) => Bikenear.fromJson(x)));
+  if (data is String) {
+    return List<Bikenear>.from(json.decode(data).map((x) => Bikenear.fromJson(x)));
+  } else if (data is List) return List<Bikenear>.from(data.map((x) => Bikenear.fromJson(x)));
   return [];
 }
 List<Bikeaavailability> BikeaavailabilityFromJson(dynamic data) {
-  if (data is String) return List<Bikeaavailability>.from(json.decode(data).map((x) => Bikeaavailability.fromJson(x)));
-  else if (data is List) return List<Bikeaavailability>.from(data.map((x) => Bikeaavailability.fromJson(x)));
+  if (data is String) {
+    return List<Bikeaavailability>.from(json.decode(data).map((x) => Bikeaavailability.fromJson(x)));
+  } else if (data is List) return List<Bikeaavailability>.from(data.map((x) => Bikeaavailability.fromJson(x)));
   return [];
 }
 
