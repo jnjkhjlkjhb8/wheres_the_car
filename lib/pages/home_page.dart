@@ -289,6 +289,8 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
   late AnimationController _animationController;
   late final Map<String,List<dynamic>> _data = {"estimates": [],"stops": []};
   Timer? _timer;
+  int select = 0;
+  Map<String,int> time = {};
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
@@ -536,6 +538,17 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       title: Text("${temp.hour.toString()} : ${temp.minute.toString()}",style: TextStyle(fontWeight: FontWeight.bold)),
     );
   }
+  void san(List<dynamic> res){
+    final temp = res.firstOrNull;
+    int sum = 0;
+    if(temp != null){
+      List<dynamic> temp2 = temp["TravelTimes"][0]["S2STimes"];
+      for (var i in temp2){
+        sum += (i["RunTime"] as num).toInt();
+        i["RunTime"] = sum;
+      }
+    }
+  }
   @override
   Widget build(BuildContext context){
     if (loading){
@@ -565,7 +578,6 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     final display = index == -1 || index == 0 ? inbound : outbound;
-    int select = 0;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -616,43 +628,73 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                 flip(),
                 Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children:[
                       Expanded(
+                          flex: 5,
                           child: Column(
                             children: [
-                              Text("站牌",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              Row(
-                                children: [
-                                  ListView.builder(
-                                    itemCount: display.length,
-                                    itemBuilder: (context, index) => buildStation(display[index], index == select),
-                                  ),
-                                  RotatedBox(
-                                    quarterTurns: 3,
-                                    child: SliderTheme(
-                                      data: SliderTheme.of(context).copyWith(
-                                        trackHeight: 0,
-                                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10),
-                                      ),
-                                      child: Slider(
-                                        value: select.toDouble(),
-                                        min: 0,
-                                        max: (display.length - 1).toDouble(),
-                                        divisions: display.length - 1,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            select = value.toInt();
-                                          });
-                                        },
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text("站牌",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: ListView.builder(
+                                        itemCount: display.length,
+                                        itemBuilder: (context, index) => buildStation(display[index], index == select),
                                       ),
                                     ),
-                                  ),
-                                ]
+                                    SizedBox(
+                                      width: 30,
+                                      child: RotatedBox(
+                                        quarterTurns: 3,
+                                        child: SliderTheme(
+                                          data: SliderTheme.of(context).copyWith(
+                                            trackHeight: 0,
+                                            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10),
+                                          ),
+                                          child: Slider(
+                                            value: select.toDouble(),
+                                            min: 0,
+                                            max: (display.length - 1).toDouble(),
+                                            divisions: display.length - 1,
+                                            onChanged: (value) {
+                                              setState(() {
+                                                select = value.toInt();
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ]
+                                ),
                               )
                             ],
                           )),
-                      Container(width: 1.67, height: double.infinity, color: Colors.grey[400], margin: EdgeInsets.symmetric(horizontal: 8)),
-                      Expanded(child: Text("發車時間",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                      VerticalDivider(width: 1,thickness: 1.67,color: Colors.grey[400],indent: 20,endIndent: 20,),
+                      Expanded(
+                        flex: 4,
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Text("今日班表",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                              ),
+                              Expanded(
+                                  child: schedule.isEmpty || S2S.isEmpty ?
+                                  Center(child: Text("今日未營運",style: TextStyle(fontSize: 16,fontWeight: FontWeight.bold))) :
+                                  ListView.builder(
+                                    itemCount: schedule.length,
+                                    itemBuilder: (context, index) => buildTime(schedule[index].DepartureTime, S2SMap[display[select].StopUID].TravelTimes.S2STimes.RunTime ?? 0),
+                                  )
+                              )
+                            ],
+                          )
+                      ),
                     ],
                   ),
                 ),
