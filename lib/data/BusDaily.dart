@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:intl/intl.dart';
+
 List<BusDailyTimeTable> BusDailyTimeTableFromJson(dynamic str) {
   final List<dynamic> jsonData = str is String ? json.decode(str) : str;
   return List<BusDailyTimeTable>.from(jsonData.map((x) => BusDailyTimeTable.fromJson(x)));
@@ -9,7 +11,7 @@ class StopTime{
   final String StopUID;
   final String StopID;
   final Map<String,String> StopName;
-  final String DepartureTime;
+  final DateTime DepartureTime;
   final int TimeType;
   StopTime({
     required this.StopSequence,
@@ -25,8 +27,8 @@ class StopTime{
       StopUID: stopTime["StopUID"],
       StopID: stopTime["StopID"],
       StopName: Map<String,String>.from(stopTime["StopName"]),
-      DepartureTime: stopTime["DepartureTime"],
-      TimeType: stopTime["TimeType"]
+      TimeType: stopTime["TimeType"],
+      DepartureTime: DateFormat("HH:mm").parse(stopTime["DepartureTime"]).toLocal(),
     );
   }
 }
@@ -58,7 +60,7 @@ class BusDailyTimeTable {
   });
   factory BusDailyTimeTable.fromJson(Map<String, dynamic> busDailyTimeTable){
     return BusDailyTimeTable(
-      BusDate: DateTime.parse(busDailyTimeTable["BusDate"]),
+      BusDate: DateTime.parse(busDailyTimeTable["BusDate"]).toLocal(),
       RouteUID: busDailyTimeTable["RouteUID"],
       SubRouteUID: busDailyTimeTable["SubRouteUID"],
       SubRouteName: Map<String, String>.from(busDailyTimeTable["SubRouteName"]),

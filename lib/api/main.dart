@@ -14,6 +14,7 @@ import 'package:bus/data/TRADailyTimetableTrain.dart';
 import 'package:bus/data/TRAODFare.dart';
 import 'package:dio/dio.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
+import '../data/BusDailyStops.dart';
 import '../data/BusStopOfRoute.dart';
 import '../utility/database.dart';
 import '../data/BusEstimateTime.dart';
@@ -227,7 +228,7 @@ class Tdx{
   Future<List<BusDailyTimeTable>> getBusDailyTable(String route,String City) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/City/$City",
+          "https://tdx.transportdata.tw/api/basic/v2/Bus/DailyTimeTable/City/$City",
           queryParameters: {
             '\$select': "BusDate,RouteUID,SubRouteUID,SubRouteName,Direction,Timetables",
             '\$filter': "SubRouteUID eq '$route'",
@@ -254,10 +255,40 @@ class Tdx{
       rethrow;
     }
   }
+  Future<List<Busdailystops>> getBusDailyStopTable(String route,String City) async{
+    try{
+      Response response = await _dio.get(
+          "https://tdx.transportdata.tw/api/basic/v2/Bus/DailyStopTimeTable/City/$City",
+          queryParameters: {
+            '\$select': "BusDate,RouteUID,SubRouteUID,SubRouteName,Stops",
+            '\$filter': "SubRouteUID eq '$route'",
+            '\$format': 'JSON',
+          },
+          options: Options(
+            headers: {
+              "authorization": "Bearer $_accesstoken",
+              "Content-Encoding": "br,gzip"
+            },
+          )
+      );
+      if(response.statusCode == 200){
+        return BusdailystopsFromJson(response.data);
+      }else{
+        throw Exception("Failed to get bus route");
+      }
+    }
+    on DioException catch (e){
+      if(e.response?.statusCode == 401){
+        await getToken();
+        return getBusDailyStopTable(route,City);
+      }
+      rethrow;
+    }
+  }
   Future<List<BusDailyTimeTable>> getInterBusDailyTable(String route) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/basic/v2/DailyTimeTable/InterCity",
+          "https://tdx.transportdata.tw/api/basic/v2/Bus/DailyTimeTable/InterCity",
           queryParameters: {
             '\$select': "BusDate,RouteUID,SubRouteUID,SubRouteName,Direction,Timetables",
             '\$filter': "SubRouteUID eq '$route'",
@@ -287,7 +318,7 @@ class Tdx{
   Future<List<BusS2S>> getBusS2S(String route,String City,String ID) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/basic/v2/S2STravlTime/City/$City/$ID",
+          "https://tdx.transportdata.tw/api/basic/v2/Bus/S2STravlTime/City/$City/$ID",
           queryParameters: {
             '\$select': "RouteUID,SubRouteUID,SubRouteID,Direction,TravelTimes",
             '\$filter': "SubRouteUID eq '$route'",
@@ -317,7 +348,7 @@ class Tdx{
   Future<Object> getInterBusS2S(String route,String ID) async{
     try{
       Response response = await _dio.get(
-          "https://tdx.transportdata.tw/api/basic/v2/S2STravlTime/InterCity/$ID",
+          "https://tdx.transportdata.tw/api/basic/v2/Bus/S2STravlTime/InterCity/$ID",
           queryParameters: {
             '\$select': "RouteUID,SubRouteUID,SubRouteID,Direction,TravelTimes",
             '\$filter': "SubRouteUID eq '$route'",

@@ -291,6 +291,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
   Timer? _timer;
   int select = 0;
   Map<String,int> time = {};
+  final ScrollController ball = ScrollController();
   Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
@@ -392,8 +393,9 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     });
     List<dynamic> estimates =[];
     List<dynamic> stops = [];
-    List<dynamic> schedules = [];
-    List<dynamic> S2S = [];
+    List<dynamic> schedulesstops = [];
+    //List<dynamic> schedules = [];
+    //List<dynamic> S2S = [];
     try {
       if (widget.route.City == "InterCity"){
         String? temp = widget.route.SubRouteUID;
@@ -404,13 +406,16 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       else{
         estimates = await Tdx().getBusEstimatedTimeOfArrival(widget.route.City, widget.route.RouteUID);
         stops = await Tdx().getBusStopOfRoute(widget.route.City, widget.route.RouteUID);
-        schedules = await Tdx().getBusDailyTable(widget.route.SubRouteUID!, widget.route.City);
-        S2S = await Tdx().getBusS2S(widget.route.SubRouteUID!, widget.route.City,widget.route.RouteID!);
+        schedulesstops = await Tdx().getBusDailyStopTable(widget.route.SubRouteUID!, widget.route.City);
+        //schedules = await Tdx().getBusDailyTable(widget.route.SubRouteUID!, widget.route.City);
+        //S2S = await Tdx().getBusS2S(widget.route.SubRouteUID!, widget.route.City,widget.route.RouteID!);
       }
       _data["estimates"] = estimates;
       _data["stops"] = stops;
-      _data["S2S"] = S2S;
-      _data["schedules"] = schedules;
+      _data["schedules"] = schedulesstops;
+      //_data["S2S"] = S2S;
+      //_data["schedules"] = schedules;
+      san();
       loading = false;
       return;
     } catch (e) {
@@ -466,12 +471,13 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
   @override
   void dispose(){
     _animationController.dispose();
+    ball.dispose();
     _timer?.cancel();
     super.dispose();
   }
   void update() {
     _animationController.repeat();
-    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 300000), (timer) {
       getdata();
     });
   }
@@ -508,6 +514,8 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
               if (index == -1) return;
               setState(() {
                 index = 1 - index;
+                select = 0;
+                san();
               });
             },
             child: Padding(
@@ -527,25 +535,30 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     );
   }
   Widget buildStation(dynamic station,bool selected){
-    return ListTile(
-      title: Text(station.StopName?["Zh_tw"] ?? "",style: TextStyle(fontWeight: FontWeight.bold)),
-      tileColor: selected ? colorscheme.primary : colorscheme.surface,
+    return SizedBox(
+        height: 50,
+        child: ListTile(
+          title: Text(station.StopName?["Zh_tw"] ?? "",style: TextStyle(fontWeight: FontWeight.bold)),
+          tileColor: selected ? colorscheme.primaryContainer : colorscheme.surface,
+      ),
     );
   }
   Widget buildTime(DateTime time,int S2S){
-    DateTime temp = time.add(Duration(minutes: S2S));
+    DateTime temp = time.add(Duration(seconds: S2S));
     return ListTile(
-      title: Text("${temp.hour.toString()} : ${temp.minute.toString()}",style: TextStyle(fontWeight: FontWeight.bold)),
+      title: Text(DateFormat("HH:mm").format(time.toLocal()),style: TextStyle(fontWeight: FontWeight.bold)),
     );
   }
-  void san(List<dynamic> res){
-    final temp = res.firstOrNull;
+  Map<String,int> offset = {};
+  void san(){
+    offset.clear();
+    final temp = _data["S2S"] ?? [].firstWhereOrNull((element) =>  element["Direction"] == index);
     int sum = 0;
     if(temp != null){
       List<dynamic> temp2 = temp["TravelTimes"][0]["S2STimes"];
       for (var i in temp2){
         sum += (i["RunTime"] as num).toInt();
-        i["RunTime"] = sum;
+        offset[i["ToStationID"]] = sum;
       }
     }
   }
@@ -562,22 +575,23 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
     }
     final List<dynamic> estimate = _data["estimates"] ?? [];
     final List<dynamic> stop = _data["stops"] ?? [];
-    final List<dynamic> S2S = _data["S2S"] ?? [];
-    final List<dynamic> schedule = _data["schedule"] ?? [];
+    //final List<dynamic> S2S = _data["S2S"] ?? [];
+    final List<dynamic> schedule = _data["schedules"] ?? [];
     final Map<String,dynamic> stopMap ={
       for (var i in estimate) i.StopUID: i
     };
-    final Map<String,dynamic> scheduleMap = {
-      for (var i in schedule) i.StopUID: i
-    };
-    final Map<String,dynamic> S2SMap = {
-      for (var i in S2S) i.StopUID: i
-    };
+    final Map<String,dynamic> scheduleMap = {};
+    for (var i in schedule){
+      for (var j in i.Stops){
+        scheduleMap[j.StopUID] = j;
+      }
+    }
     List<dynamic> inbound = stop.firstWhereOrNull((element) => element.Direction == 0)?.Stops ?? [];
     List<dynamic> outbound = stop.firstWhereOrNull((element) => element.Direction == 1)?.Stops ?? [];
     outbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     inbound.sort((a,b) => a.StopSequence.compareTo(b.StopSequence));
     final display = index == -1 || index == 0 ? inbound : outbound;
+    final temp = scheduleMap[display[select].StopUID].TimeTables;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -596,8 +610,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                     widget.route.City != 'Taipei' && widget.route.City != 'NewTaipei' ? Tab(text: "今日班表") : Tab(text: "班表"),
                   ],
                 ),
-                AnimatedBuilder(animation: _animationController, builder:
-                    (context, child) {
+                AnimatedBuilder(animation: _animationController, builder: (context, child) {
                   return LinearProgressIndicator(
                     value: refresh ? null : (1.0-_animationController.value),
                     color: refresh ? colorscheme.secondary : colorscheme.primary,
@@ -627,75 +640,96 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
               children: [
                 flip(),
                 Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children:[
-                      Expanded(
-                          flex: 5,
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text("站牌",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              ),
-                              Expanded(
-                                child: Row(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Card.outlined(
+                      elevation: 2,
+                      clipBehavior: Clip.antiAlias,
+                      child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children:[
+                            Expanded(
+                                flex: 5,
+                                child: Column(
                                   children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Text("站牌",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    ),
+                                    Divider(height: 1,thickness: 1.67,color: Colors.grey[400]),
                                     Expanded(
-                                      child: ListView.builder(
-                                        itemCount: display.length,
-                                        itemBuilder: (context, index) => buildStation(display[index], index == select),
+                                      child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: ListView.builder(
+                                                controller: ball,
+                                                itemCount: display.length,
+                                                itemBuilder: (context, index) => buildStation(display[index], index == select),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 30,
+                                              height: display.length * 50,
+                                              child: RotatedBox(
+                                                  quarterTurns: 1,
+                                                  child: SliderTheme(
+                                                    data: SliderTheme.of(context).copyWith(
+                                                      trackHeight: display.length * 1,
+                                                      overlayShape: SliderComponentShape.noOverlay,
+                                                      activeTrackColor: colorscheme.primary,
+                                                      thumbColor: colorscheme.primary,
+                                                    ),
+                                                    child: Slider.adaptive(
+                                                      value: select.toDouble(),
+                                                      autofocus: true,
+                                                      min: 0,
+                                                      max: (display.length - 1).toDouble(),
+                                                      divisions: display.length - 1,
+                                                      onChanged: (value) {
+                                                        setState(() {
+                                                          select = value.toInt();
+                                                        });
+                                                        if(ball.hasClients){
+                                                          ball.animateTo(
+                                                            ((select*50)-(ball.position.viewportDimension/2)+25).clamp(0.0, ball.position.maxScrollExtent) as double,
+                                                            duration: Duration(milliseconds: 300),
+                                                            curve: Curves.easeInOut,
+                                                          );
+                                                        }
+                                                      },
+                                                    ),
+                                                  )
+                                              ),
+                                            ),
+                                          ]
                                       ),
+                                    )
+                                  ],
+                                )),
+                            VerticalDivider(width: 1,thickness: 1.67,color: Colors.grey[400],indent: 40),
+                            Expanded(
+                                flex: 4,
+                                child: Column(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Text("今日班表",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                     ),
-                                    SizedBox(
-                                      width: 30,
-                                      child: RotatedBox(
-                                        quarterTurns: 3,
-                                        child: SliderTheme(
-                                          data: SliderTheme.of(context).copyWith(
-                                            trackHeight: 0,
-                                            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 10),
-                                          ),
-                                          child: Slider(
-                                            value: select.toDouble(),
-                                            min: 0,
-                                            max: (display.length - 1).toDouble(),
-                                            divisions: display.length - 1,
-                                            onChanged: (value) {
-                                              setState(() {
-                                                select = value.toInt();
-                                              });
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ]
-                                ),
-                              )
-                            ],
-                          )),
-                      VerticalDivider(width: 1,thickness: 1.67,color: Colors.grey[400],indent: 20,endIndent: 20,),
-                      Expanded(
-                        flex: 4,
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Text("今日班表",style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                              ),
-                              Expanded(
-                                  child: schedule.isEmpty || S2S.isEmpty ?
-                                  Center(child: Text("今日未營運",style: TextStyle(fontSize: 16,fontWeight: FontWeight.bold))) :
-                                  ListView.builder(
-                                    itemCount: schedule.length,
-                                    itemBuilder: (context, index) => buildTime(schedule[index].DepartureTime, S2SMap[display[select].StopUID].TravelTimes.S2STimes.RunTime ?? 0),
-                                  )
-                              )
-                            ],
-                          )
+                                    Divider(height: 1,thickness: 1.67,color: Colors.grey[400]),
+                                    Expanded(
+                                        child: schedule.isEmpty ?
+                                        Center(child: Text("今日未營運",style: TextStyle(fontSize: 16,fontWeight: FontWeight.bold))) :
+                                        ListView.builder(
+                                          itemCount: temp.length,
+                                          itemBuilder: (context, index) => buildTime(temp[index].DepartureTime, offset[display[select].StationID] ?? 0),
+                                        )
+                                    )
+                                  ],
+                                )
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
                   ),
                 ),
               ],
