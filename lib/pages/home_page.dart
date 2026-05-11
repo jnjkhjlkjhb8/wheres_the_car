@@ -669,17 +669,19 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                                             ),
                                             SizedBox(
                                               width: 30,
-                                              height: display.length * 50,
+                                              height: (display.length-1) * 50+32,
                                               child: RotatedBox(
                                                   quarterTurns: 1,
                                                   child: SliderTheme(
                                                     data: SliderTheme.of(context).copyWith(
-                                                      trackHeight: display.length * 1,
+                                                      trackHeight: 16,
                                                       overlayShape: SliderComponentShape.noOverlay,
-                                                      activeTrackColor: colorscheme.primary,
-                                                      thumbColor: colorscheme.primary,
+                                                      thumbShape: RoundSliderThumbShape(
+                                                        enabledThumbRadius: 12,
+                                                        elevation: 4,
+                                                      ),
                                                     ),
-                                                    child: Slider.adaptive(
+                                                    child: Slider(
                                                       value: select.toDouble(),
                                                       autofocus: true,
                                                       min: 0,
