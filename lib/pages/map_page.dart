@@ -18,12 +18,9 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   GoogleMapController? _mapController;
   final Set<AdvancedMarker> _markers = {};
   final Set<Polyline> _polylines = {};
-  late AnimationController _bottomsheetanimationController;
   late AnimationController dropdownanimation;
   late Animation dropanimation;
   Map<String, BitmapDescriptor> _icons = {};
-  List<dynamic>? _busData;
-  Map<String,String>? _busname;
   Position? _position;
   int range = 500;
   double zoom = 16.0;
@@ -47,8 +44,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   @override
   void initState() {
     super.initState();
-    _bottomsheetanimationController = BottomSheet.createAnimationController(this);
-    _bottomsheetanimationController.duration = Duration(milliseconds: 300);
     dropdownanimation = AnimationController(vsync: this, duration: Duration(milliseconds: 500));
     dropanimation = Tween<double>(begin: -1.0,end: 0.0).animate(
       CurvedAnimation(parent: dropdownanimation, curve: Curves.bounceOut),
@@ -61,7 +56,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   }
   @override
   void dispose() {
-    _bottomsheetanimationController.dispose();
     super.dispose();
   }
   @override
@@ -82,11 +76,6 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
     if (bus.isNotEmpty || bike.isNotEmpty || mrt.isNotEmpty) buildmarker();
   }
   void _down(dynamic data){
-    setState(() {
-      _selected = data.StationUID;
-      _busData = merge[data.StationName['Zh_tw']];
-      _busname = data.StationName;
-    });
     dropdownanimation.forward(from: 0.0);
   }
   void _up() async{
@@ -191,95 +180,119 @@ class _MapPageState extends State<MapPage> with TickerProviderStateMixin{
   }
   @override
   Widget build(BuildContext context) {
-    final systemUiInsets = MediaQuery.of(context).padding;
-    if (_position == null){
-      return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-    return Stack(
-      children:[
-       Scaffold(
-        body: Stack(
-          children: [
-            GoogleMap(
-              myLocationEnabled: true,
-              zoomControlsEnabled: false,
-              myLocationButtonEnabled: false,
-              padding: const EdgeInsets.only(bottom: 200),
-              initialCameraPosition: CameraPosition(
-                target: LatLng(25.0339, 121.5646),
-                zoom: 16,
-              ),
-              onCameraMove: (position){
-                zoom = position.zoom;
-              },
-              onCameraIdle: (){
-                buildmarker();
-              },
-              onTap: (latlng) async{
-                if(_selected != null) {
-                  await dropdownanimation.reverse();
-                  setState(() {
-                    _selected = null;
-                    _busData = null;
-                    _busname = null;
-                  });
-                  buildmarker();
-                }
-              },
-              markers: _markers,
-              polylines: _polylines,
-              onMapCreated: (GoogleMapController controller) {
-                _mapController = controller;
-                update();
-              },
-            ),
-            Positioned(
-              bottom: 220,
-              right: 20,
-              child: FloatingActionButton(
-                onPressed: update,
-                child: Icon(Icons.my_location),
-              ),
-            ),
-            SheetViewport(
-              child: _Sheet(
-                merge: merge,
-                position: _position!,
-                JumpIn: (data){
-                  final String temp = GeoHasher().encode(data[0].PositionLon, data[0].PositionLat, precision: 10);
-                  int count = 0,len = temp.length > data[0].GeoHash.length ? data[0].GeoHash.length : temp.length;
-                  for (int i = 0; i < len; i++) {
-                    if (temp[i] == data[0].GeoHash[i]) {
-                      count++;
+    return DefaultSheetController(
+      child: Scaffold(
+        body: Builder(
+          builder: (context) {
+            return Stack(
+              children: [
+                GoogleMap(
+                  myLocationEnabled: true,
+                  zoomControlsEnabled: false,
+                  myLocationButtonEnabled: false,
+                  padding: const EdgeInsets.only(bottom: 200),
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(25.0339, 121.5646),
+                    zoom: 16,
+                  ),
+                  onCameraMove: (position){
+                    zoom = position.zoom;
+                  },
+                  onCameraIdle: (){
+                    buildmarker();
+                  },
+                  onTap: (latlng) async{
+                    if(_selected != null) {
+                      await dropdownanimation.reverse();
+                      setState(() {
+                        _selected = null;
+                      });
+                      buildmarker();
                     }
-                    else {
-                      break;
-                    }
-                  }
-                  _mapController?.animateCamera(
-                    CameraUpdate.newLatLngZoom(
-                      LatLng((_position!.latitude + data[0].PositionLat) / 2, (_position!.longitude + data[0].PositionLon) / 2),
-                      count >= 7 ? 17.0 : count == 6 ? 16.0 : count == 5 ? 14.0 : count == 4 ? 12.0 : count == 3 ? 10.0 : count == 2 ? 8.0 : count == 1 ? 6.0 : 5.0,
-                    ),
-                  );
-                },
-                range: range,
-                onRangeChanged: (data){
-                  setState(() {
-                    range = data;
-                  });
+                  },
+                  markers: _markers,
+                  polylines: _polylines,
+                  onMapCreated: (GoogleMapController controller) {
+                    _mapController = controller;
+                    update();
+                  },
+                ),
+                Locateme(update: (data){
                   update();
-                },
+                }
+                ),
+                if(_position != null)
+                  SheetViewport(
+                    child: _Sheet(
+                      merge: merge,
+                      position: _position!,
+                      JumpIn: (data){
+                        final String temp = GeoHasher().encode(data[0].PositionLon, data[0].PositionLat, precision: 10);
+                        int count = 0,len = temp.length > data[0].GeoHash.length ? data[0].GeoHash.length : temp.length;
+                        for (int i = 0; i < len; i++) {
+                          if (temp[i] == data[0].GeoHash[i]) {
+                            count++;
+                          }
+                          else {
+                            break;
+                          }
+                        }
+                        _mapController?.animateCamera(
+                          CameraUpdate.newLatLngZoom(
+                            LatLng((_position!.latitude + data[0].PositionLat) / 2, (_position!.longitude + data[0].PositionLon) / 2),
+                            count >= 7 ? 17.0 : count == 6 ? 16.0 : count == 5 ? 14.0 : count == 4 ? 12.0 : count == 3 ? 10.0 : count == 2 ? 8.0 : count == 1 ? 6.0 : 5.0,
+                          ),
+                        );
+                      },
+                      range: range,
+                      onRangeChanged: (data){
+                        setState(() {
+                          range = data;
+                        });
+                        update();
+                      },
+                    ),
+                  )
+                else Center(child: CircularProgressIndicator()),
+              ],
+            );
+          }
+        )
+      )
+    );
+  }
+}
+class Locateme extends StatelessWidget{
+  final Function(dynamic) update;
+  const Locateme({
+    required this.update,
+  });
+  @override
+  Widget build(BuildContext context) {
+    final animation = SheetOffsetDrivenAnimation(controller: DefaultSheetController.of(context), initialValue: 1);
+    return AnimatedBuilder(animation: animation,
+        builder: (context,child){
+          double temp = 1.0;
+          if (animation.value > 0.8) temp = ((0.95-animation.value)/0.15).clamp(0.0, 1.0);
+          return Positioned(
+            bottom: 125 + animation.value * 500 + 20,
+            right: 20,
+            child: IgnorePointer(
+              ignoring: temp < 0.1,
+              child: AnimatedOpacity(
+                duration: Duration(milliseconds: 200),
+                opacity: temp,
+                child: FloatingActionButton(
+                  onPressed: () {
+                    update(null);
+                  },
+                  child: Icon(Icons.my_location),
+                ),
               ),
-            )
-          ],
-        ),
-      ),
-    ]);
+            ),
+          );
+        }
+    );
   }
 }
 class _Sheet extends StatelessWidget { // https://github.com/fujidaiti/smooth_sheets/blob/main/example/lib/tutorial/imperative_paged_sheet.dart
@@ -301,6 +314,15 @@ class _Sheet extends StatelessWidget { // https://github.com/fujidaiti/smooth_sh
       onGenerateInitialRoutes: (navigator, initialRoute) {
         return [
           PagedSheetRoute(
+            initialOffset: SheetOffset.absolute(125),
+            snapGrid: SheetSnapGrid(
+              snaps: [
+                SheetOffset.absolute(125),
+                SheetOffset(0.45),
+                SheetOffset(0.95),
+              ],
+            ),
+            scrollConfiguration: SheetScrollConfiguration(),
             builder: (context) {
               return _StationSheet(
                 merge: merge,
@@ -342,6 +364,14 @@ class _StationSheet extends StatelessWidget{
   Widget build(BuildContext context) {
     void NavigateToBus(BuildContext context,String Name) {
       final route = PagedSheetRoute(
+          initialOffset: SheetOffset(0.45),
+          snapGrid: SheetSnapGrid(
+            snaps: [
+              SheetOffset.absolute(125),
+              SheetOffset(0.45),
+              SheetOffset(0.95),
+            ],
+          ),
           scrollConfiguration: SheetScrollConfiguration(),
           builder: (context) => BusEstimate(
             stationName: merge[Name]![0].StationName,
@@ -360,7 +390,14 @@ class _StationSheet extends StatelessWidget{
         title: Text(data[0].StationName['Zh_tw'] ?? name),
         subtitle: Text("約${Geolocator.distanceBetween(position.latitude, position.longitude, data[0].PositionLat, data[0].PositionLon).toStringAsFixed(2)}公尺"),
         trailing: IconButton(
-          onPressed: () => JumpIn(data),
+          onPressed: () {
+            JumpIn(data);
+            DefaultSheetController.of(context).animateTo(
+              SheetOffset.absolute(125),
+              duration: Duration(milliseconds: 1000),
+              curve: Curves.easeInOut,
+            );
+          },
           icon: Icon(Icons.location_searching_rounded),
         ),
         onTap: () {
@@ -371,7 +408,6 @@ class _StationSheet extends StatelessWidget{
     return LayoutBuilder(
         builder: (context, setBottomSheetState) {
           List <String> temp = merge.keys.toList();
-          List<Widget> array = [];
           temp.sort((a, b) {
             double distA = Geolocator.distanceBetween(position.latitude, position.longitude, merge[a]![0].PositionLat, merge[a]![0].PositionLon);
             double distB = Geolocator.distanceBetween(position.latitude, position.longitude, merge[b]![0].PositionLat, merge[b]![0].PositionLon);

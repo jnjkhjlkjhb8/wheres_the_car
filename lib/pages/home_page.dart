@@ -309,7 +309,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       color = Colors.grey;
     }
     else if (status == 1){
-      text = Text(DateFormat("HH:mm").format(estimate?.NextBusTime?.toLocal() ?? ((stopschedule.Timeables as List).where((i) {return i.DepartureTime.toLocal().isAfter(DateTime.now);}),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold))));
+      text = Text(DateFormat("HH:mm").format(estimate?.NextBusTime?.toLocal() ?? ((stopschedule.Timeables as List).where((i) {return i.DepartureTime.toLocal().isAfter(DateTime.now);}))),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold));
       color = Colors.grey;
     }
     else if (status == 4){
@@ -616,7 +616,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                 AnimatedBuilder(animation: _animationController, builder: (context, child) {
                   return LinearProgressIndicator(
                     value: refresh ? null : (1.0-_animationController.value),
-                    color: refresh ? colorscheme.secondary : colorscheme.primary,
+                    color: refresh ? colorscheme.primary : colorscheme.secondary,
                     minHeight: 3.0,
                     backgroundColor: Colors.transparent,
                   );
@@ -697,7 +697,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                                                         if(ball.hasClients){
                                                           ball.animateTo(
                                                             ((select*50)-(ball.position.viewportDimension/2)+35) as double,
-                                                            duration: Duration(milliseconds: 300),
+                                                            duration: Duration(milliseconds: 367),
                                                             curve: Curves.easeInOut,
                                                           );
                                                         }
@@ -711,7 +711,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                                     )
                                   ],
                                 )),
-                            VerticalDivider(width: 1,thickness: 1.67,color: Colors.grey[400],indent: 40),
+                            VerticalDivider(width: 1,thickness: 1.67,color: Colors.grey[400],indent: 41.5),
                             Expanded(
                                 flex: 4,
                                 child: Column(
