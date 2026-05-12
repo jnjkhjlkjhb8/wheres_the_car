@@ -14,28 +14,28 @@
 盡可能優化API減少token使用量.  <br>
 搜索格過濾縣市.  <br>
 依賴NextBusTime改成依賴班表 <br>
+修好pegman <br>
 
 ## idea
-搜尋路線的時候可以把結果依照用戶常點的該路線位於哪個縣市進行排序結果. 
-查詢起迄站點對應班次、車輛與各站即時位置資訊+總路線圖. 
-票價查詢及時刻表. 
-擁擠程度. --待考慮
-後端程式轉移到firebase?
-slider
-home page
-bottom
-XXXXXXX
-X X X X
-X X X X
-X X X X
-XXXXXXX
+搜尋路線的時候可以把結果依照用戶常點的該路線位於哪個縣市進行排序結果. <br>
+查詢起迄站點對應班次、車輛與各站即時位置資訊+總路線圖. <br>
+票價查詢及時刻表. <br>
+擁擠程度. --待考慮  <br>
+後端程式轉移到firebase?  <br>
+home page  <br>
+bottom  <br>
+XXXXXXX  <br>
+X X X X  <br>
+X X X X  <br>
+X X X X  <br>
+XXXXXXX  <br>
 
 ## Completed
-路線查詢 --week1. 
-API from TDX (大略) --week1. 
-Daily Update Routes --week1.
-地圖 --week2.
-班表頁面
+路線查詢 --week1. <br> 
+API from TDX (大略) --week1. <br> 
+Daily Update Routes --week1. <br>
+地圖 --week2. <br>
+班表頁面 <br>
 
 ## Bug
 
