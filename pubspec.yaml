@@ -47,8 +47,8 @@ dependencies:
   dart_geohash: ^2.1.0
   flutter_secure_storage: ^9.2.2
   flutter_svg: ^2.0.7
-
   collection: any
+  smooth_sheets: ^1.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

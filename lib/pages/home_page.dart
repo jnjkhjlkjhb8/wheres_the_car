@@ -38,7 +38,6 @@ class HomePage extends StatefulWidget{
   @override
   State<HomePage> createState() => _HomePageState();
 }
-
 class _HomePageState extends State<HomePage> {
   final UpdateRoute fetchRoutes = UpdateRoute();
   final SearchController _searchController = SearchController();
@@ -57,8 +56,12 @@ class _HomePageState extends State<HomePage> {
       return [TypewriterAnimatedText(Greeting[2], textStyle: TextStyle(fontSize: 25, fontWeight: FontWeight.bold,color: Colors.black),speed: Duration(milliseconds: 100), )];
     }
   }
+  late Future<List<Favorite>> _favorites;
   int currentPage = 0;
-
+  void initState(){
+    super.initState();
+    _favorites = getFavorites();
+  }
   @override
   Widget build(BuildContext context){
     final colorscheme = Theme.of(context).colorScheme;
@@ -97,7 +100,7 @@ class _HomePageState extends State<HomePage> {
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: 200),
               child: FutureBuilder<List<Favorite>>(
-                future: getFavorites(),
+                future: _favorites,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -292,7 +295,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
   int select = 0;
   Map<String,int> time = {};
   final ScrollController ball = ScrollController();
-  Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last){
+  Widget buildlisttile(dynamic stop, dynamic estimate, dynamic colorsceme,bool first,bool last,dynamic stopschedule){
     int? EstimateTime = estimate?.EstimateTime;
     int? status = estimate?.StopStatus;
     Color color;
@@ -306,7 +309,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
       color = Colors.grey;
     }
     else if (status == 1){
-      text = Text(DateFormat("HH:mm").format(estimate?.NextBusTime?.toLocal() ?? DateTime.now()),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold));
+      text = Text(DateFormat("HH:mm").format(estimate?.NextBusTime?.toLocal() ?? ((stopschedule.Timeables as List).where((i) {return i.DepartureTime.toLocal().isAfter(DateTime.now);}),style: TextStyle(fontSize: 18,fontWeight: FontWeight.bold))));
       color = Colors.grey;
     }
     else if (status == 4){
@@ -631,7 +634,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                 Expanded(
                   child: ListView.builder(
                     itemCount: display.length,
-                    itemBuilder: (context, index) => buildlisttile(display[index],stopMap[display[index].StopUID],colorscheme, index == 0, index == display.length - 1),
+                    itemBuilder: (context, index) => buildlisttile(display[index],stopMap[display[index].StopUID],colorscheme, index == 0, index == display.length - 1,scheduleMap[display[index].StopUID]),
                   )
                 )
               ],
@@ -693,7 +696,7 @@ class _BusPageState extends State<BusPage> with SingleTickerProviderStateMixin{
                                                         });
                                                         if(ball.hasClients){
                                                           ball.animateTo(
-                                                            ((select*50)-(ball.position.viewportDimension/2)+25).clamp(0.0, ball.position.maxScrollExtent) as double,
+                                                            ((select*50)-(ball.position.viewportDimension/2)+35) as double,
                                                             duration: Duration(milliseconds: 300),
                                                             curve: Curves.easeInOut,
                                                           );
