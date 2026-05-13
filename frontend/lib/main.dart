@@ -1,5 +1,5 @@
 import 'package:bus/pages/home_page.dart';
-import '../pages/map_page.dart';
+import 'pages/map_page.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

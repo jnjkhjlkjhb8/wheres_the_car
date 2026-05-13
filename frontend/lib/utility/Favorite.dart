@@ -1,5 +1,5 @@
 import 'dart:convert';
-import '../utility/database.dart';
+import 'database.dart';
 
 List<Favorite> favoritesFromJson(String str) => List<Favorite>.from(json.decode(str).map((x) => Favorite.fromJson(x))).toList();
 
