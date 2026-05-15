@@ -1,13 +1,19 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 
-message route{
+message subroute{
   string RouteUID = 1;
   string RouteName = 2;
   string SubRouteUID = 3;
   string SubRouteName = 4;
-  string DepartureStopName = 5;
-  string DestinationStopName = 6;
+  map<int32,Direction> Directions = 7;
+}
+
+message Direction{
+  string DepartureStopName = 1;
+  string DestinationStopName = 2;
+  string Geometry = 3;
+  repeated stop Stops = 4;
 }
 
 message stop{
@@ -19,7 +25,6 @@ message stop{
 }
 
 message RouteOfStop{
-  string RouteUID = 1;
   string SubRouteUID = 2;
   int32 Direction = 3;
   repeated stop Stops = 4;
@@ -34,6 +39,7 @@ message Shape{
 message Station{
   string StationUID = 1;
   string StationName = 2;
-  double PositionLon = 3;
-  double PositionLat = 4;
+  string city = 3;
+  double PositionLon = 4;
+  double PositionLat = 5;
 }
