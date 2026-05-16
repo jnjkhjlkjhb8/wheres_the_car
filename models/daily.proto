@@ -21,7 +21,7 @@ message stop{
   int32 StopSequence = 2;
   double PositionLon = 3;
   double PositionLat = 4;
-  string StationUID = 5;
+  string StationID = 5;
 }
 
 message RouteOfStop{
