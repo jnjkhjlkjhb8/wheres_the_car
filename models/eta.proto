@@ -1,0 +1,27 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+message Bus_eat {
+  string StopUID = 1;
+  string RouteUID = 2;
+  map<int32,Direction> Directions = 3;
+}
+message Direction {
+  int32 Direction = 1;
+  int32 EstimateTime = 2;
+  string SrcUpdateTime = 3;
+  repeated  Bus_position Bus_positions = 4;
+}
+message Bus_position {
+  string PlateNumb = 1;
+  string RouteUID = 2;
+  string SubRouteUID = 3;
+  int32 Direction = 4;
+  double PositionLon = 5;
+  double PositionLat = 6;
+  int32 Speed = 7;
+  int32 Azimuth = 8;
+  int32 DutyStatus = 9;
+  int32 BusStatus = 10;
+  string GPSTime = 11;
+}
