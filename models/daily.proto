@@ -17,11 +17,12 @@ message Direction{
 }
 
 message stop{
-  string StopName = 1;
-  int32 StopSequence = 2;
-  double PositionLon = 3;
-  double PositionLat = 4;
-  string StationID = 5;
+  string StopUID = 1;
+  string StopName = 2;
+  int32 StopSequence = 3;
+  double PositionLon = 4;
+  double PositionLat = 5;
+  string StationID = 6;
 }
 
 message RouteOfStop{

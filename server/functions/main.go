@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -47,6 +48,7 @@ type raw_Stopofroute struct {
 	SubRouteUID string `json:"SubRouteUID"`
 	Direction   uint8  `json:"Direction"`
 	Stops       []struct {
+		StopUID  string `json:"StopUID"`
 		StopName struct {
 			Zhtw string `json:"Zh_tw"`
 		} `json:"StopName"`
@@ -94,7 +96,7 @@ type raw_Bus_Esimated struct {
 	SubRouteUID   string `json:"SubRouteUID"`
 	Direction     uint8  `json:"Direction"`
 	EstimatedTime int32  `json:"EstimatedTime"`
-	StopStatus    int32  `json:"StopStatus"`
+	StopStatus    uint8  `json:"StopStatus"`
 	SrcUpdateTime string `json:"SrcUpdateTime"`
 }
 type raw_Bus_Position struct {
@@ -108,8 +110,30 @@ type raw_Bus_Position struct {
 	} `json:"BusPosition"`
 	Azimuth    int     `json:"Azimuth"`
 	Speed      float64 `json:"Speed"`
-	DutyStatus int32   `json:"DutyStatus"`
-	BusStatus  int32   `json:"BusStatus"`
+	DutyStatus uint8   `json:"DutyStatus"`
+	BusStatus  uint8   `json:"BusStatus"`
+	GPSTime    string  `json:"GPSTime"`
+}
+type Bus_StationMapping struct {
+	StationUID   string
+	StationName  string
+	SubRouteUID  string
+	SubRouteName string
+	Direction    uint8
+	StopUID      string
+	StopSequence uint8
+}
+type Bus_History struct {
+	SubRouteUID   string
+	Direction     uint8
+	StopUID       string
+	EstimatedTime int32
+	StopStatus    uint8
+	PlateNumb     string
+	PositionLon   float64
+	PositionLat   float64
+	GPSTime       time.Time
+	SrcUpdateTime time.Time
 }
 
 func main() {
@@ -120,14 +144,21 @@ func main() {
 	c.SetBaseURL("https://tdx.transportdata.tw/api/basic").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "br,gzip").
-		SetAuthToken(getToken(rc, c))
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-		})
-	})
-	r.Run(":8080")
+		SetDoNotParseResponse(true).
+		SetAuthToken(getToken(rc, c)).
+		SetRetryCount(5).
+		SetRetryWaitTime(1 * time.Second).
+		SetRetryMaxWaitTime(5 * time.Second).
+		AddRetryCondition(
+			func(r *resty.Response, err error) bool {
+				if err != nil {
+					return true
+				}
+				return r.StatusCode() == 429
+			},
+		)
 	defer rc.Close()
+	defer db.Close()
 }
 
 // static
@@ -217,7 +248,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 		savestations(db, city)
 		saveschedule(db, city)
 		savestatictodb(db, subRoutemap)
-		fmt.Println("%s done", city)
+		fmt.Printf("%s done\n", city)
 		time.Sleep(1 * time.Second)
 	}
 	log.Println("done all cities")
@@ -225,7 +256,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	var row [][]interface{}
 	for _, sub := range raw {
-		for _, d := range sub.Directions {
+		for dir, d := range sub.Directions {
 			stops, err := json.Marshal(d.Stops)
 			if err != nil {
 				fmt.Println(err.Error())
@@ -233,7 +264,7 @@ func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 			row = append(row, []interface{}{
 				sub.SubRouteUID,
 				sub.RouteUID,
-				d,
+				dir,
 				sub.RouteName,
 				sub.SubRouteName,
 				d.Geometry,
@@ -318,13 +349,13 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 		for dir, d := range sub.Directions {
 			for _, stop := range d.Stops {
 				mp = append(mp, []interface{}{
-					stop.StationID, sub.SubRouteUID, dir, sub.SubRouteName, stop.StopSequence,
+					stop.StationID, stop.StopName, sub.SubRouteUID, sub.SubRouteName, dir, stop.StopUID, stop.StopSequence,
 				})
 			}
 		}
 	}
 	if len(row) > 0 {
-		db.Exec(ctx, `"CREATE TEMP TABLE temp_pb (sub_route_uid text,route_uid text,pb bytea) ON COMMIT DROP"`)
+		db.Exec(ctx, `CREATE TEMP TABLE temp_pb (sub_route_uid text,route_uid text,pb bytea) ON COMMIT DROP`)
 		db.CopyFrom(ctx, pgx.Identifier{"temp_pb"}, []string{"uid", "rid", "pb"}, pgx.CopyFromRows(row))
 		db.Exec(ctx, `INSERT INTO bus_static (
                         sub_route_uid,
@@ -336,53 +367,233 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 						`)
 	}
 	if len(mp) > 0 {
-		db.Exec(ctx, `"CREATE TEMP TABLE temp_map(sid text,sruid text,dir int,rname text,suit text,seq int) ON COMMIT DROP"`)
-		db.CopyFrom(ctx, pgx.Identifier{"temp_map"}, []string{"sid", "sruid", "dir", "rname", "seq"}, pgx.CopyFromRows(mp))
+		db.Exec(ctx, `CREATE TEMP TABLE temp_map(sid text, sname text, sruid text, rname text, dir int, suid text, seq int) ON COMMIT DROP`)
+		db.CopyFrom(ctx, pgx.Identifier{"temp_map"}, []string{"sid", "sname", "sruid", "rname", "dir", "suid", "seq"}, pgx.CopyFromRows(mp))
 		db.Exec(ctx, `INSERT INTO bus_station_stop_map (
                                   station_id,
+                                  station_name,
                                   sub_route_uid,
-                                  direction,
                                   route_name,
+                                  direction,
                                   stop_uid,
                                   stop_sequence
 							)
-							SELECT sid, sruid, dir, rname, suid, seq FROM temp_map
-							ON CONFLICT (station_id, sub_route_uid, stop_uid) DO UPDATE
-							SET route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence;`)
+							SELECT sid, sname, sruid, rname, dir, suid, seq FROM temp_map
+							ON CONFLICT (station_id, sub_route_uid, stop_uid, direction) DO UPDATE
+							SET station_name = EXCLUDED.station_name, route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence;`)
 	}
 }
 
 // eta
 func Get_Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string) {
-	since, _ := rc.Get("Last_EtaUpdate_" + city).Result()
-	url := fmt.Sprintf("/v2/Bus/EstimatedTimeOfArrival/City/%s", city)
-	if resp, err := client.R().SetDoNotParseResponse(true).SetHeader("If-Modified-Since", since).Get(url); err != nil && resp.StatusCode() != 200 {
+	mp, err := busstaticmp(db, city)
+	if err != nil || len(mp) <= 0 {
+		return
+	}
+	var eat []raw_Bus_Esimated
+	var url string
+	if city == "InterCity" {
+		url = "/v2/Bus/EstimatedTimeOfArrival/InterCity"
+	} else {
+		url = fmt.Sprintf("/v2/Bus/EstimatedTimeOfArrival/City/%s", city)
+	}
+	if resp, err := client.R().Get(url); err == nil && resp.StatusCode() == 200 {
 		defer resp.RawBody().Close()
-		var etas []raw_Bus_Esimated
-		decoder := json.NewDecoder(resp.RawBody())
-		if err := decoder.Decode(&etas); err != nil {
-			redisPipe := rc.Pipeline()
-			var history [][]interface{}
-			for _, eta := range etas {
-				uid, dir := makethatsame(city, eta.SubRouteUID, eta.Direction)
-				redisKey := fmt.Sprintf("bus:eta:%s", uid)
-				bytes, _ := json.Marshal(eta)
-				redisPipe.HSet(redisKey, eta.StopUID, string(bytes))
-				redisPipe.Expire(redisKey, 120*time.Second)
-				t, parseErr := time.Parse(time.RFC3339, eta.SrcUpdateTime)
-				if parseErr == nil {
-					history = append(history, []interface{}{
-						uid, eta.StopUID, dir, eta.PlateNumb, eta.EstimatedTime, eta.StopStatus, t,
-					})
-				}
-
+		_ = json.Unmarshal(resp.Body(), &eat)
+	}
+	var posit []raw_Bus_Position
+	if city == "InterCity" {
+		url = "/v2/Bus/RealTimeByFrequency/InterCity"
+	} else {
+		url = fmt.Sprintf("/v2/Bus/RealTimeByFrequency/City/%s", city)
+	}
+	if resp, err := client.R().Get(url); err == nil && resp.StatusCode() == 200 {
+		defer resp.RawBody().Close()
+		_ = json.Unmarshal(resp.Body(), &posit)
+	}
+	busmap := make(map[string][]*models.BusPosition)
+	etamap := make(map[string]raw_Bus_Esimated)
+	stations := make(map[string]*models.Bus_StationArrival)
+	routes := make(map[string]*models.Bus_RouteArrival)
+	for _, eat := range eat {
+		etamap[eat.StopUID] = eat
+	}
+	for _, b := range posit {
+		uid, _ := makethatsame(city, b.SubRouteUID, b.Direction)
+		pb := &models.BusPosition{
+			PlateNumb:   b.PlateNumb,
+			PositionLon: b.BusPosition.PositionLon,
+			PositionLat: b.BusPosition.PositionLat,
+			Speed:       int32(b.Speed),
+			Azimuth:     int32(b.Azimuth),
+			DutyStatus:  int32(b.DutyStatus),
+			BusStatus:   int32(b.BusStatus),
+			GpsTime:     b.GPSTime,
+		}
+		busmap[uid] = append(busmap[uid], pb)
+	}
+	for _, b := range mp {
+		eta, ok := etamap[b.SubRouteUID]
+		var est, status uint8
+		var time string
+		if ok {
+			est = uint8(eta.EstimatedTime)
+			status = eta.StopStatus
+			time = eta.SrcUpdateTime
+		} else {
+			status = 67
+		}
+		if _, ok = stations[b.SubRouteUID]; !ok {
+			stations[b.StationName] = &models.Bus_StationArrival{
+				StationName: b.StationName,
+				StationUid:  make([]string, 0),
+				Routes:      make([]*models.Bus_StopEstimate, 0),
 			}
 		}
+		station := stations[b.StationName]
+		if !slices.Contains(station.StationUid, b.StationUID) {
+			station.StationUid = append(station.StationUid, b.StationUID)
+		}
+		station.Routes = append(station.Routes, &models.Bus_StopEstimate{
+			StopUid:       b.StopUID,
+			SubRouteUid:   b.SubRouteUID,
+			RouteName:     b.SubRouteName,
+			Direction:     int32(b.Direction),
+			Estimate:      int32(est),
+			StopStatus:    int32(status),
+			SrcUpdateTime: time,
+			Buses:         busmap[b.SubRouteUID],
+		})
+		if _, ok = routes[b.SubRouteUID]; !ok {
+			routes[b.SubRouteUID] = &models.Bus_RouteArrival{
+				SubRouteUid: b.SubRouteUID,
+				Stops:       make([]*models.Bus_RouteEstimate, 0),
+			}
+		}
+		routes[b.SubRouteUID].Stops = append(routes[b.SubRouteUID].Stops, &models.Bus_RouteEstimate{
+			StopUid:       b.StopUID,
+			Direction:     int32(b.Direction),
+			Estimate:      int32(est),
+			StopStatus:    int32(status),
+			SrcUpdateTime: time,
+			Buses:         busmap[b.SubRouteUID],
+		})
+	}
+	pipe := rc.Pipeline()
+	for name, pb := range stations {
+		byte, _ := proto.Marshal(pb)
+		pipe.Set(fmt.Sprintf("bus_eta_station:%s:%s", city, name), byte, 180*time.Second)
+	}
+	for uid, pb := range routes {
+		byte, _ := proto.Marshal(pb)
+		pipe.Set(fmt.Sprintf("bus_eta_route:%s:%s", city, uid), byte, 180*time.Second)
+	}
+	_, err = pipe.Exec()
+	if err != nil {
+		fmt.Println(err.Error())
 	}
 }
 
 // basic func
-
+func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position, city string) {
+	mp := make(map[string]raw_Bus_Position)
+	var rows [][]interface{}
+	for _, b := range posit {
+		mp[b.PlateNumb] = b
+	}
+	for _, b := range eat {
+		stime, err := time.Parse(time.RFC3339, b.SrcUpdateTime)
+		var gps interface{} = nil
+		var geom interface{} = nil
+		if err != nil {
+			stime = time.Now()
+		}
+		if pos, ok := mp[b.PlateNumb]; ok {
+			t, err := time.Parse(time.RFC3339, pos.GPSTime)
+			if err != nil {
+				t = stime
+			}
+			gps = t
+			geom = fmt.Sprintf("POINT(%.6f %.6f)", pos.BusPosition.PositionLon, pos.BusPosition.PositionLat)
+		}
+		rows = append(rows, []interface{}{
+			b.SubRouteUID,
+			b.Direction,
+			b.StopUID,
+			b.EstimatedTime,
+			b.StopStatus,
+			b.PlateNumb,
+			geom,
+			gps,
+			stime,
+		})
+	}
+	if len(rows) <= 0 {
+		return
+	}
+	_, err := db.Exec(ctx, "CREATE TEMP TABLE temp_bus_history (uid text, dir int2, suid text, est int4, sts int2,pl text, geom text,gps timestamptz,stime timestamptz) ON COMMIT DROP;")
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	_, err = db.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"sub_route_uid", "direction", "stop_uid", "estimate_time", "stop_status", "plate_numb", "bus_position", "gps_time", "src_update_time"}, pgx.CopyFromRows(rows))
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	c1 := `INSERT INTO bus_eta_history (
+				sub_route_uid,
+		 		direction,
+				stop_uid,
+				estimate_time,
+				stop_status,
+				plate_numb,
+				bus_position,
+				gps_time,
+			    src_update_time
+			)
+		SELECT
+				uid,
+		 		dir,
+				suid,
+				est,
+				sts,
+				pl,
+				CASE WHEN geom IS NOT NULL THEN ST_GeomFromText(geom, 4326) END,
+				gps,
+			    stime
+		FROM temp_bus_history;`
+	_, err = db.Exec(ctx, c1)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+}
+func busstaticmp(db *pgxpool.Pool, city string) ([]Bus_StationMapping, error) {
+	var query string
+	var arg string
+	if city == "interCity" {
+		query = "SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence FROM bus_station_stop_map WHERE stop_uid LIKE $1"
+		arg = "THB%"
+	} else {
+		query = "SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence FROM bus_station_stop_map WHERE stop_uid LIKE $1"
+		arg = city + "%"
+	}
+	rows, err := db.Query(ctx, query, arg)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Bus_StationMapping
+	for rows.Next() {
+		var temp Bus_StationMapping
+		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID, &temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence)
+		if err != nil {
+			fmt.Println(err)
+		}
+		list = append(list, temp)
+	}
+	return list, nil
+}
 func makethatsame(city string, subRouteUID string, Direction uint8) (string, uint8) {
 	if city == "InterCity" {
 		temp := subRouteUID[len(subRouteUID)-2:]
@@ -413,7 +624,6 @@ func connectdb() *pgxpool.Pool {
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
 	err = conn.Ping(context.Background())
 	if err != nil {
 		panic(err)
@@ -436,8 +646,8 @@ func getToken(rc *redis.Client, c *resty.Client) string {
 			fmt.Println(err.Error())
 		}
 		var mp map[string]interface{}
-		val = mp["access_token"].(string)
 		err = json.Unmarshal([]byte(resp.String()), &mp)
+		val = mp["access_token"].(string)
 		if err != nil {
 			fmt.Println(err.Error())
 		}
@@ -462,9 +672,6 @@ func process_static(client *resty.Client, city string, db *pgxpool.Pool, api str
 	defer resp.RawResponse.Body.Close()
 	if resp.StatusCode() == 304 {
 		return
-	}
-	if resp.StatusCode() == 429 {
-		time.Sleep(1 * time.Second)
 	}
 	dec := json.NewDecoder(resp.RawResponse.Body)
 	var raw_rows [][]interface{}
