@@ -10,7 +10,7 @@ env:
   AZURE_FUNCTIONAPP_PACKAGE_PATH: '.'
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -31,15 +31,48 @@ jobs:
           go mod download
       - name: 'build handler'
         run: GOOS=linux GOARCH=amd64 go build -o server/functions/handler ./server/functions
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+         name: gogomeat
+         path: server/functions/handler
+  deploy:
+     runs-on: ubuntu-latest
+     permissions:
+       contents: read
+     needs: build
+     steps:
+      - name: download
+        uses: actions/download-artifact@v4
+        with:
+          name: gogomeat
       - name: 'log in'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DB8DDD7635304CE78B66541CB7154F0B }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_55415EB09D764C369EAD9925B827D838 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_AE37953F2CEC4FB1B476A44B06252F30}}
+      - name: 'getip'
+        id: ip
+        run: |
+          PUBLIC_IP=$(curl -s https://ipify.org)
+          echo "ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+      - name: 'set ip'
+        run: |
+          az functionapp config access-restriction add \
+            --resource-group "supermachine_group" \
+            --name "${{ env.AZURE_FUNCTIONAPP_NAME }}" \
+            --rule-name "temp" \
+            --action Allow \
+            --ip-address "${{ steps.ip.outputs.ip }}/32" \
       - name: 'deploy'
         uses: Azure/functions-action@v1
-        id: fa
         with:
-          app-name: ${{env.AZURE_FUNCTIONAPP_NAME}}
-          package: ${{env.AZURE_FUNCTIONAPP_PACKAGE_PATH}}
+           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+      - name: 'remove ip'
+        run: |
+           az functionapp config access-restriction remove \
+             --resource-group "supermachine_group" \
+             --name "${{ env.AZURE_FUNCTIONAPP_NAME }}" \
+             --rule-name "temp"
