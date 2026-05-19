@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: '1.26.3'
-      - name: 'install '
+      - name: 'install'
         run: |
           sudo apt-get install -y protobuf-compiler
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -28,10 +28,15 @@ jobs:
           go mod download
       - name: 'build handler'
         run: GOOS=linux GOARCH=amd64 go build -o server/functions/handler ./server/functions
+      - name: 'log in'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_DB8DDD7635304CE78B66541CB7154F0B }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_55415EB09D764C369EAD9925B827D838 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_AE37953F2CEC4FB1B476A44B06252F30}}
       - name: 'deploy'
         uses: Azure/functions-action@v1
         id: fa
         with:
           app-name: ${{env.AZURE_FUNCTIONAPP_NAME}}
           package: ${{env.AZURE_FUNCTIONAPP_PACKAGE_PATH}}
-          publish-profile: ${{secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE}}
