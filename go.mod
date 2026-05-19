@@ -1,4 +1,4 @@
-module backend
+module github.com/jnjkhjlkjhb8/bus
 
 go 1.26.3
 

@@ -1,11 +1,12 @@
 package main
 
 import (
-	"backend/models"
 	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/jnjkhjlkjhb8/bus/models"
 
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"

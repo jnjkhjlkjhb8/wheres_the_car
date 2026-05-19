@@ -1,7 +1,8 @@
 package main
 
 import (
-	"backend/models"
+	"github.com/jnjkhjlkjhb8/bus/models"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -484,6 +485,6 @@ func Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 		if err != nil {
 			fmt.Println(err.Error())
 		}
-		savebushistory(db, eat, posit, city)
+		savebushistory(db, eat, posit)
 	}
 }

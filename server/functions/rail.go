@@ -1,7 +1,8 @@
 package main
 
 import (
-	"backend/models"
+	"github.com/jnjkhjlkjhb8/bus/models"
+
 	"fmt"
 	"log"
 	"time"
