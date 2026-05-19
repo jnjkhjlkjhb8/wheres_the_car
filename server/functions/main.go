@@ -15,6 +15,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+func get_port() string {
+	port := ":8080"
+	if val, ok := os.LookupEnv("FUNCTIONS_CUSTOMHANDLER_PORT"); ok {
+		port = ":" + val
+	}
+	return port
+}
+
 func main() {
 	r := gin.Default()
 	c := resty.New()
@@ -56,6 +64,8 @@ func main() {
 		Bus_eta(c, rc, db)
 		mrt_eta(c, rc, db)
 	})
+	port := get_port()
+	r.Run(port)
 }
 
 // basic func
@@ -73,7 +83,7 @@ func call_api(client *resty.Client, rc *redis.Client, url string, name string) (
 	decorder := json.NewDecoder(resp.RawResponse.Body)
 	return *decorder, true, nil, func() { resp.RawResponse.Body.Close() }
 }
-func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position, city string) {
+func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
 	mp := make(map[string]raw_Bus_Position)
 	var rows [][]interface{}
 	for _, b := range posit {
