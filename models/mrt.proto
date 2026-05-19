@@ -1,0 +1,13 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+message mrt_live{
+  string LineID = 1;
+  string StationID = 2;
+  string system = 3;
+  string TripHeadSign = 4;
+  string DestinationStaionID = 5;
+  string DestinationStationName = 6;
+  int32 ServiceStatus = 7;
+  int32 EstimateTime = 8;
+}

@@ -1,0 +1,27 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+message thsa_fare {
+  string origin_station_id = 1;
+  string destination_station_id = 2;
+  string ticket_type = 3;
+  int32 price = 4;
+}
+message thsa_stoptime{
+  int32 stop_sequence = 3;
+  string station_id = 1;
+  string station_name = 2;
+  string ArrivalTime = 4;
+  string DepartureTime = 5;
+}
+message thsa_timetable{
+  string TrainDate = 1;
+  string TrainNo = 2;
+  int32 Direction = 3;
+  string Starting_Station_ID = 4;
+  string Starting_Station_Name = 5;
+  string EndingStationID = 6;
+  string EndingStationName = 7;
+  string Note = 8;
+  repeated thsa_stoptime stoptimes = 9;
+}

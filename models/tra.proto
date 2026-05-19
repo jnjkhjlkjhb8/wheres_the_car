@@ -1,6 +1,12 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 
+message TraFareItem {
+  string origin_station_id = 1;
+  string destination_station_id = 2;
+  string ticket_type = 3;
+  int32 price = 4;
+}
 message tra_stoptime{
   int32 stop_sequence = 3;
   string station_id = 1;
@@ -28,16 +34,16 @@ message tra_timetable{
   bool ServiceAddedFlag = 16;
   bool SuspendedFlag = 17;
   string Note = 18;
-  tra_stoptime stoptimes = 19;
+  repeated tra_stoptime stoptimes = 19;
 }
 message tra_delay{
   string train_no = 1;
   string station_id = 2;
-  int32 dalay = 3;
+  int32 delay = 3;
 }
 message tra_LiveBoard{
   string train_no = 1;
-  int32 direction = 2;
+  bool direction = 2;
   string train_type_id = 3;
   string train_type_code = 4;
   string train_type_name = 5;

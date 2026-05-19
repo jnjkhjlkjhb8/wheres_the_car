@@ -3,7 +3,7 @@
     {
       "type": "timerTrigger",
       "direction": "in",
-      "name": "ontime",
+      "name": "10s",
       "schedule": "0/10 * * * * *"
     }
   ]

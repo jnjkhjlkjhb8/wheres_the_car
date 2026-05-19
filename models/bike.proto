@@ -1,0 +1,11 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+message bike{
+  string StationUID = 1;
+  int32 ServiceStatus = 2;
+  int32 ServiceType = 3;
+  int32 AvailableReturnBikes = 4;
+  int32 GeneralBikes = 5;
+  int32 ElectricBikes = 6;
+}
