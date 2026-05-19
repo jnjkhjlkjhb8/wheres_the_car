@@ -24,9 +24,7 @@ jobs:
           go mod tidy
           go mod download
       - name: 'build handler'
-        run: |
-          cd server/functions
-          GOOS=linux GOARCH=amd64 go build -o handler .
+        run: GOWORK=off GOOS=linux GOARCH=amd64 go build -o handler .
       - name: 'deploy'
         uses: Azure/functions-action@v1
         id: fa
