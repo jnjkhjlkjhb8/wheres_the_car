@@ -31,11 +31,20 @@ jobs:
           go mod download
       - name: 'build handler'
         run: GOOS=linux GOARCH=amd64 go build -o server/functions/handler ./server/functions
+      - name: 'Prepare deployment package'
+        run: |
+          mkdir -p package
+          cp server/functions/handler package/
+          cp host.json package/
+          cp -r server/functions/1min package/
+          cp -r server/functions/2min package/
+          cp -r server/functions/10s package/
+          cp -r server/functions/daily package/
       - name: upload
         uses: actions/upload-artifact@v4
         with:
          name: gogomeat
-         path: server/functions/handler
+         path: package
   deploy:
      runs-on: ubuntu-latest
      permissions:
