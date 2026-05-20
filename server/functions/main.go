@@ -198,7 +198,7 @@ func makethatsame(city string, subRouteUID string, Direction uint8) (string, uin
 }
 func connectredis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
+		Addr:     "10.1.1.4:6379",
 		Password: "",
 		DB:       0,
 	})
