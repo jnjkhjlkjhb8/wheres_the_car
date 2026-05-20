@@ -102,18 +102,21 @@ type Bus_stationmap struct {
 	StopUID      string
 	StopSequence uint8
 }
-type Bus_History struct {
-	SubRouteUID   string
-	Direction     uint8
-	StopUID       string
-	EstimatedTime int32
-	StopStatus    uint8
-	PlateNumb     string
-	PositionLon   float64
-	PositionLat   float64
-	GPSTime       time.Time
-	SrcUpdateTime time.Time
-}
+
+/*
+	type Bus_History struct {
+		SubRouteUID   string
+		Direction     uint8
+		StopUID       string
+		EstimatedTime int32
+		StopStatus    uint8
+		PlateNumb     string
+		PositionLon   float64
+		PositionLat   float64
+		GPSTime       time.Time
+		SrcUpdateTime time.Time
+	}
+*/
 type raw_Bus_Shape struct {
 	SubRouteUID string `json:"SubRouteUID,omitempty"`
 	RouteUID    string `json:"RouteUID"`
@@ -133,7 +136,8 @@ type raw_Bus_Station struct {
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
 }
-type bus_schedule_freq struct {
+
+/*type bus_schedule_freq struct {
 	StartTime      string `json:"StartTime"`
 	EndTime        string `json:"EndTime"`
 	MinHeadwayMins int    `json:"MinHeadwayMins"`
@@ -163,24 +167,25 @@ type bus_schedule_tb struct {
 		StopSequence  int    `json:"StopSequence"`
 		DepartureTime string `json:"DepartureTime"`
 	} `json:"StopTimes"`
-}
+}*/
 
 func bus_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	dailyRoute(rc, client, db)
 }
 func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
-	fmt.Println("Daily Route")
+	log.Printf("[BUS] action=dailyRoute event=start")
 	for _, city := range cities {
+		log.Printf("[BUS] action=dailyRoute city=%s event=city_start", city)
 		subRoutemap := make(map[string]*models.Subroute)
 		_, err := db.Exec(ctx, "DELETE FROM raw_bus_route WHERE destin = $1 OR depart = $1", city)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
 		}
 		process_static(c, rc, db, city, "Route", func(raw []byte) {
 			var r raw_Bus_Route
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("[BUS] action=dailyRoute city=%s api=Route event=unmarshal_error error=%v", city, err)
 			}
 			for _, sub := range r.SubRoutes {
 				uid, dir := makethatsame(city, sub.SubRouteUID, sub.Direction)
@@ -210,7 +215,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 			var r raw_Stopofroute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("[BUS] action=dailyRoute city=%s api=StopOfRoute event=unmarshal_error error=%v", city, err)
 			}
 			uid, dir := makethatsame(city, r.SubRouteUID, r.Direction)
 			if sr, ok := subRoutemap[uid]; ok {
@@ -229,7 +234,10 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 		})
 		process_static(c, rc, db, city, "Shape", func(raw []byte) {
 			var r raw_Bus_Shape
-			json.Unmarshal(raw, &r)
+			err := json.Unmarshal(raw, &r)
+			if err != nil {
+				log.Println("[BUS] action=dailyRoute event=marshal_error error=%v", err)
+			}
 			uid, dir := makethatsame(city, r.SubRouteUID, r.Direction)
 			if sr, ok := subRoutemap[uid]; ok {
 				if d, ok := sr.Directions[int32(dir)]; ok {
@@ -241,12 +249,12 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 		process_static(c, rc, db, city, "Station", func(raw []byte) {})
 		changetodbformat(db, subRoutemap)
 		savestations(db, city)
-		saveschedule(db, city)
+		saveschedule( /*db, city*/ )
 		savestatictodb(db, subRoutemap)
-		fmt.Printf("%s done\n", city)
+		log.Printf("[BUS] action=dailyRoute city=%s event=city_complete subroute_count=%d", city, len(subRoutemap))
 		time.Sleep(1 * time.Second)
 	}
-	log.Println("done all cities")
+	log.Printf("[BUS] action=dailyRoute event=complete")
 }
 func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	var row [][]interface{}
@@ -254,7 +262,7 @@ func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 		for dir, d := range sub.Directions {
 			stops, err := json.Marshal(d.Stops)
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("[BUS] action=changetodbformat event=marshal_error error=%v", err)
 			}
 			row = append(row, []interface{}{
 				sub.SubRouteUID,
@@ -269,10 +277,12 @@ func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	}
 	b, err := db.Begin(ctx)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf("[BUS] action=changetodbformat event=begin_error error=%v", err)
 		return
 	}
-	defer b.Rollback(ctx)
+	defer func() {
+		_ = b.Rollback(ctx)
+	}()
 	c1 := `
 			CREATE TEMP TABLE temp_bus (
     		uid text,
@@ -301,10 +311,18 @@ func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 				   )
 			FROM temp_bus ON CONFLICT (sub_route_uid,direction) DO UPDATE SET geometry = excluded.geometry,stops = excluded.stops;
 			`
-	b.Exec(ctx, c1)
-	b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "geom", "rawstop"}, pgx.CopyFromRows(row))
-	b.Exec(ctx, c2)
-	b.Commit(ctx)
+	if _, err := b.Exec(ctx, c1); err != nil {
+		log.Printf("[BUS] action=changetodbformat event=create_temp_error error=%v", err)
+	}
+	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "geom", "rawstop"}, pgx.CopyFromRows(row)); err != nil {
+		log.Printf("[BUS] action=changetodbformat event=copyfrom_error error=%v row_count=%d", err, len(row))
+	}
+	if _, err := b.Exec(ctx, c2); err != nil {
+		log.Printf("[BUS] action=changetodbformat event=insert_error error=%v", err)
+	}
+	if err := b.Commit(ctx); err != nil {
+		log.Printf("[BUS] action=changetodbformat event=commit_error error=%v", err)
+	}
 }
 func savestations(db *pgxpool.Pool, city string) {
 	c1 := `
@@ -319,10 +337,14 @@ func savestations(db *pgxpool.Pool, city string) {
 			FROM raw_bus_route WHERE type = 'Station' AND depart = $1
 			ON CONFLICT (station_uid) DO UPDATE SET station_name = EXCLUDED.station_name, position = EXCLUDED.position
 			`
-	db.Exec(ctx, c1, city)
+	if _, err := db.Exec(ctx, c1, city); err != nil {
+		log.Printf("[BUS] action=savestations city=%s event=insert_error error=%v", city, err)
+	} else {
+		log.Printf("[BUS] action=savestations city=%s event=complete", city)
+	}
 }
-func saveschedule(db *pgxpool.Pool, city string) {
-	println("之後再修")
+func saveschedule( /*db *pgxpool.Pool, city string*/ ) {
+	log.Println("之後再修")
 	/*	rows, _ := db.Query(ctx,
 				`SELECT sub_route_uid, content
 		         FROM raw_bus_route
@@ -419,7 +441,7 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	for _, sub := range raw {
 		pb, err := proto.Marshal(sub)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf("[BUS] action=savestatictodb event=marshal_error subroute=%s error=%v", sub.SubRouteUID, err)
 			continue
 		}
 		row = append(row, []interface{}{
@@ -435,25 +457,37 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	}
 	b, err := db.Begin(ctx)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf("[BUS] action=savestatictodb event=begin_error error=%v", err)
 		return
 	}
 	if len(row) > 0 {
-		b.Exec(ctx, `CREATE TEMP TABLE temp_pb (sub_route_uid text,route_uid text,pb bytea) ON COMMIT DROP`)
-		b.CopyFrom(ctx, pgx.Identifier{"temp_pb"}, []string{"uid", "rid", "pb"}, pgx.CopyFromRows(row))
-		b.Exec(ctx, `INSERT INTO bus_static (
+		if _, err := b.Exec(ctx, `CREATE TEMP TABLE temp_pb (sub_route_uid text,route_uid text,pb bytea) ON COMMIT DROP`); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=create_temp_pb_error error=%v", err)
+		}
+		if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_pb"}, []string{"uid", "rid", "pb"}, pgx.CopyFromRows(row)); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=copyfrom_pb_error error=%v row_count=%d", err, len(row))
+		}
+		if _, err := b.Exec(ctx, `INSERT INTO bus_static (
                         sub_route_uid,
                         route_uid,
                         pb
-						)
-						SELECT uid,rid,pb FROM temp_pb
-						ON CONFLICT (sub_route_uid) DO UPDATE SET pb = excluded.pb,updated_at = NOW()
-						`)
+					)
+					SELECT uid,rid,pb FROM temp_pb
+					ON CONFLICT (sub_route_uid) DO UPDATE SET pb = excluded.pb,updated_at = NOW()
+					`); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=insert_pb_error error=%v", err)
+		} else {
+			log.Printf("[BUS] action=savestatictodb event=insert_pb_success row_count=%d", len(row))
+		}
 	}
 	if len(mp) > 0 {
-		b.Exec(ctx, `CREATE TEMP TABLE temp_map(sid text, sname text, sruid text, rname text, dir int, suid text, seq int) ON COMMIT DROP`)
-		b.CopyFrom(ctx, pgx.Identifier{"temp_map"}, []string{"sid", "sname", "sruid", "rname", "dir", "suid", "seq"}, pgx.CopyFromRows(mp))
-		b.Exec(ctx, `INSERT INTO bus_station_stop_map (
+		if _, err := b.Exec(ctx, `CREATE TEMP TABLE temp_map(sid text, sname text, sruid text, rname text, dir int, suid text, seq int) ON COMMIT DROP`); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=create_temp_map_error error=%v", err)
+		}
+		if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_map"}, []string{"sid", "sname", "sruid", "rname", "dir", "suid", "seq"}, pgx.CopyFromRows(mp)); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=copyfrom_map_error error=%v row_count=%d", err, len(mp))
+		}
+		if _, err := b.Exec(ctx, `INSERT INTO bus_station_stop_map (
                                   station_id,
                                   station_name,
                                   sub_route_uid,
@@ -461,18 +495,29 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
                                   direction,
                                   stop_uid,
                                   stop_sequence
-							)
-							SELECT sid, sname, sruid, rname, dir, suid, seq FROM temp_map
-							ON CONFLICT (station_id, sub_route_uid, stop_uid, direction) DO UPDATE
-							SET station_name = EXCLUDED.station_name, route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence;`)
+									)
+									SELECT sid, sname, sruid, rname, dir, suid, seq FROM temp_map
+									ON CONFLICT (station_id, sub_route_uid, stop_uid, direction) DO UPDATE
+									SET station_name = EXCLUDED.station_name, route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence;`); err != nil {
+			log.Printf("[BUS] action=savestatictodb event=insert_map_error error=%v", err)
+		} else {
+			log.Printf("[BUS] action=savestatictodb event=insert_map_success row_count=%d", len(mp))
+		}
 	}
-	b.Commit(ctx)
+	if err := b.Commit(ctx); err != nil {
+		log.Printf("[BUS] action=savestatictodb event=commit_error error=%v", err)
+	} else {
+		log.Printf("[BUS] action=savestatictodb event=complete pb_rows=%d map_rows=%d", len(row), len(mp))
+	}
 }
 
 func Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[BUS_ETA] action=Bus_eta event=start")
 	for _, city := range cities {
+		log.Printf("[BUS_ETA] action=Bus_eta city=%s event=city_start", city)
 		mp, err := busstaticmp(db, city)
 		if err != nil || len(mp) <= 0 {
+			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=skip_empty reason=no_stations", city)
 			return
 		}
 		var eat []raw_Bus_Esimated
@@ -582,17 +627,20 @@ func Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 		}
 		pipe := rc.Pipeline()
 		for name, pb := range stations {
-			byte, _ := proto.Marshal(pb)
-			pipe.Set(fmt.Sprintf("bus_eta_station:%s:%s", city, name), byte, 180*time.Second)
+			data, _ := proto.Marshal(pb)
+			pipe.Set(fmt.Sprintf("bus_eta_station:%s:%s", city, name), data, 180*time.Second)
 		}
 		for uid, pb := range routes {
-			byte, _ := proto.Marshal(pb)
-			pipe.Set(fmt.Sprintf("bus_eta_route:%s:%s", city, uid), byte, 180*time.Second)
+			data, _ := proto.Marshal(pb)
+			pipe.Set(fmt.Sprintf("bus_eta_route:%s:%s", city, uid), data, 180*time.Second)
 		}
 		_, err = pipe.Exec()
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=redis_error error=%v station_count=%d route_count=%d eat_count=%d posit_count=%d", city, err, len(stations), len(routes), len(eat), len(posit))
+		} else {
+			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=redis_success station_count=%d route_count=%d eat_count=%d posit_count=%d", city, len(stations), len(routes), len(eat), len(posit))
 		}
 		savebushistory(db, eat, posit)
 	}
+	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }

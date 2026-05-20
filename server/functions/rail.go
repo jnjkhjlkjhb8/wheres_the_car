@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/jnjkhjlkjhb8/bus/models"
 
 	"fmt"
@@ -24,7 +26,7 @@ type rail_Station struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
-	StationCode string `json:"StationID"`
+	StationCode string `json:"StationCode"`
 }
 type rail_Fare struct {
 	OriginStationID      string `json:"OriginStationID"`
@@ -36,42 +38,45 @@ type rail_Fare struct {
 		Price      int32 `json:"Price"`
 	} `json:"Fares"`
 }
-type rail_DailyTrain struct {
-	TrainDate      string `json:"TrainDate"`
-	DailyTrainInfo struct {
-		TrainNo           string `json:"TrainNo"`
-		Direction         bool   `json:"Direction"`
-		StartingStationID string `json:"StartingStationID"`
-		EndingStationID   string `json:"EndingStationID"`
-		TrainTypeID       string `json:"TrainTypeID"`
-		TrainTypeCode     string `json:"TrainTypeCode"`
-		TrainTypeName     struct {
-			ZhTw string `json:"Zh_tw"`
-		} `json:"TrainTypeName"`
-		TripLine           uint8 `json:"TripLine"`
-		WheelchairFlag     bool  `json:"WheelchairFlag"`
-		PackageServiceFlag bool  `json:"PackageServiceFlag"`
-		DiningFlag         bool  `json:"DiningFlag"`
-		BikeFlag           bool  `json:"BikeFlag"`
-		BreastFeedingFlag  bool  `json:"BreastFeedingFlag"`
-		DailyFlag          bool  `json:"DailyFlag"`
-		ServiceAddedFlag   bool  `json:"ServiceAddedFlag"`
-		SuspendedFlag      bool  `json:"SuspendedFlag"`
-		Note               struct {
-			ZhTw string `json:"Zh_tw"`
-		} `json:"Note"`
-	} `json:"DailyTrainInfo"`
-	StopTimes []struct {
-		StopSequence uint8  `json:"StopSequence"`
-		StationID    string `json:"StationID"`
-		StationName  struct {
-			ZhTw string `json:"Zh_tw"`
-		} `json:"StationName"`
-		ArrivalTime   string `json:"ArrivalTime"`
-		DepartureTime string `json:"DepartureTime"`
-		SuspendedFlag bool   `json:"SuspendedFlag"`
-	} `json:"StopTimes"`
-}
+
+/*
+	type rail_DailyTrain struct {
+		TrainDate      string `json:"TrainDate"`
+		DailyTrainInfo struct {
+			TrainNo           string `json:"TrainNo"`
+			Direction         bool   `json:"Direction"`
+			StartingStationID string `json:"StartingStationID"`
+			EndingStationID   string `json:"EndingStationID"`
+			TrainTypeID       string `json:"TrainTypeID"`
+			TrainTypeCode     string `json:"TrainTypeCode"`
+			TrainTypeName     struct {
+				ZhTw string `json:"Zh_tw"`
+			} `json:"TrainTypeName"`
+			TripLine           uint8 `json:"TripLine"`
+			WheelchairFlag     bool  `json:"WheelchairFlag"`
+			PackageServiceFlag bool  `json:"PackageServiceFlag"`
+			DiningFlag         bool  `json:"DiningFlag"`
+			BikeFlag           bool  `json:"BikeFlag"`
+			BreastFeedingFlag  bool  `json:"BreastFeedingFlag"`
+			DailyFlag          bool  `json:"DailyFlag"`
+			ServiceAddedFlag   bool  `json:"ServiceAddedFlag"`
+			SuspendedFlag      bool  `json:"SuspendedFlag"`
+			Note               struct {
+				ZhTw string `json:"Zh_tw"`
+			} `json:"Note"`
+		} `json:"DailyTrainInfo"`
+		StopTimes []struct {
+			StopSequence uint8  `json:"StopSequence"`
+			StationID    string `json:"StationID"`
+			StationName  struct {
+				ZhTw string `json:"Zh_tw"`
+			} `json:"StationName"`
+			ArrivalTime   string `json:"ArrivalTime"`
+			DepartureTime string `json:"DepartureTime"`
+			SuspendedFlag bool   `json:"SuspendedFlag"`
+		} `json:"StopTimes"`
+	}
+*/
 type Tra_Delay struct {
 	TrainNo     string `json:"TrainNo"`
 	StationID   string `json:"StationID"`
@@ -104,7 +109,7 @@ type Tra_LiveBoard struct {
 	SrcUpdateTime          string `json:"SrcUpdateTime"`
 }
 
-type thsr_availableseatstatuslist struct {
+/*type thsr_availableseatstatuslist struct {
 	AvailableSeats []struct {
 		TrainNo           string `json:"TrainNo"`
 		Direction         bool   `json:"Direction"`
@@ -123,20 +128,25 @@ type thsr_availableseatstatuslist struct {
 			BusinessSeatStatus string `json:"BusinessSeatStatus"`
 		} `json:"StopStations"`
 	} `json:"AvailableSeats"`
-}
+}*/
 
 func rail_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[RAIL] action=rail_static event=start")
 	tra_station(client, rc, db)
 	thsr_station(client, rc, db)
 	tra_fare(client, rc, db)
+	log.Printf("[RAIL] action=rail_static event=complete")
 }
 func tra_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[RAIL] action=tra_station event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/Station", "tra_stations")
 	if err != nil || !comp {
+		log.Printf("[RAIL] action=tra_station event=skip reason=api_error")
 		return
 	}
 	defer flipopen()
 	if _, err := dec.Token(); err != nil {
+		log.Printf("[RAIL] action=tra_station event=decode_error error=%v", err)
 		return
 	}
 	c1 := `INSERT INTO tra_stations (
@@ -158,15 +168,18 @@ func tra_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	}
 	b := db.SendBatch(ctx, batch)
 	_ = b.Close()
-	log.Println("updated tra_stations")
+	log.Printf("[RAIL] action=tra_station event=complete")
 }
 func thsr_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[RAIL] action=thsr_station event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/THSR/Station", "thsr_stations")
 	if err != nil || !comp {
+		log.Printf("[RAIL] action=thsr_station event=skip reason=api_error")
 		return
 	}
 	defer flipopen()
 	if _, err := dec.Token(); err != nil {
+		log.Printf("[RAIL] action=thsr_station event=decode_error error=%v", err)
 		return
 	}
 	c1 := `INSERT INTO thsr_stations (
@@ -189,15 +202,18 @@ func thsr_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	}
 	b := db.SendBatch(ctx, batch)
 	_ = b.Close()
-	log.Println("updated thsr_stations")
+	log.Printf("[RAIL] action=thsr_station event=complete")
 }
 func tra_fare(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[RAIL] action=tra_fare event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/ODFare", "tra_fare")
 	if err != nil || !comp {
+		log.Printf("[RAIL] action=tra_fare event=skip reason=api_error")
 		return
 	}
 	defer flipopen()
 	if _, err := dec.Token(); err != nil {
+		log.Printf("[RAIL] action=tra_fare event=decode_error error=%v", err)
 		return
 	}
 	var rows [][]interface{}
@@ -211,33 +227,54 @@ func tra_fare(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	}
 	b, err := db.Begin(ctx)
 	if err != nil {
+		log.Printf("[RAIL] action=tra_fare event=begin_error error=%v", err)
 		return
 	}
-	defer b.Rollback(ctx)
-	b.Exec(ctx, `TRUNCATE TABLE tra_fares;`)
+	defer func(b pgx.Tx, ctx context.Context) {
+		err := b.Rollback(ctx)
+		if err != nil {
+			log.Printf("[RAIL] action=tra_fare event=rollback_error error=%v", err)
+		}
+	}(b, ctx)
+	_, err = b.Exec(ctx, `TRUNCATE TABLE tra_fares;`)
+	if err != nil {
+		log.Printf("[RAIL] action=tra_fare event=execute_error error=%v", err)
+	}
 	_, err = b.CopyFrom(ctx, pgx.Identifier{"tra_fares"}, []string{"origin_station_id", "destination_station_id", "ticket_type", "price"}, pgx.CopyFromRows(rows))
 	if err == nil {
 		_ = b.Commit(ctx)
-		log.Println("updated tra_fares")
+		log.Printf("[RAIL] action=tra_fare event=complete row_count=%d", len(rows))
+	} else {
+		log.Printf("[RAIL] action=tra_fare event=copyfrom_error error=%v", err)
 	}
 }
 
 func tra_eta(client *resty.Client, rc *redis.Client) {
+	log.Printf("[TRA_ETA] action=tra_eta event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/LiveTrainDelay", "tra_delay")
 	if err == nil && comp {
 		func() {
 			defer flipopen()
 			if _, err := dec.Token(); err == nil {
+				delayCount := 0
 				pipe := rc.Pipeline()
 				for dec.More() {
 					var temp Tra_Delay
 					if err := dec.Decode(&temp); err == nil {
+						delayCount++
 						pipe.HSet("tra:delay", temp.TrainNo, temp.DelayTime)
 					}
 				}
-				_, _ = pipe.Exec()
+				_, pipErr := pipe.Exec()
+				if pipErr != nil {
+					log.Printf("[TRA_ETA] action=tra_eta event=delay_redis_error error=%v", pipErr)
+				} else {
+					log.Printf("[TRA_ETA] action=tra_eta event=delay_redis_success count=%d", delayCount)
+				}
 			}
 		}()
+	} else {
+		log.Printf("[TRA_ETA] action=tra_eta event=skip_delay reason=api_error")
 	}
 	dec, comp, err, flipopen = call_api(client, rc, "/v2/Rail/TRA/LiveBoard", "tra_liveboard")
 	func() {
@@ -288,5 +325,5 @@ func tra_eta(client *resty.Client, rc *redis.Client) {
 		}
 		_, err = pipe.Exec()
 	}()
-	log.Println("updated tra eta updated")
+	log.Printf("[TRA_ETA] action=tra_eta event=complete")
 }

@@ -19,7 +19,7 @@ type mrt_station struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
-	city               string `json:"LocationCity"`
+	LocationCity       string `json:"LocationCity"`
 	serviceType        string
 	StationID          string `json:"StationID"`
 	BikeAllowOnHoliday bool   `json:"BikeAllowOnHoliday"`
@@ -57,18 +57,24 @@ type mrt_live struct {
 }
 
 func mrt_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[MRT] action=mrt_static event=start")
 	getmrt_station(client, rc, db)
 	getmrt_firstlast(client, rc, db)
+	log.Printf("[MRT] action=mrt_static event=complete")
 }
 func getmrt_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[MRT] action=getmrt_station event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
+		log.Printf("[MRT] action=getmrt_station system=%s event=system_start", system)
 		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/Station/%s", system), "mrt_stations")
 		if err != nil || !comp {
+			log.Printf("[MRT] action=getmrt_station system=%s event=skip reason=api_error", system)
 			return
 		}
 		if _, err := dec.Token(); err != nil {
 			flipopen()
+			log.Printf("[MRT] action=getmrt_station system=%s event=decode_error error=%v", system, err)
 			return
 		}
 		var row [][]interface{}
@@ -92,45 +98,55 @@ func getmrt_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
                                 type text,
                                 id text,
                                 bike bool
-					) ON COMMIT DROP;`
+				) ON COMMIT DROP;`
 			c2 := `INSERT INTO mrt_station (
-						stationposition,
-						system,
-						servicetype,
-						stationid,
-						bikeallowonholiday,
-						"created_at"
-					)
-					SELECT st_geomfromtext(geom, 4326), system, type, id, bike, address,NOW() FROM temp_mrt
-					ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,system = EXCLUDED.system,servicetype = EXCLUDED.servicetype,stationposition = EXCLUDED.stationposition,updated_at = NOW();`
+					stationposition,
+					system,
+					servicetype,
+					stationid,
+					bikeallowonholiday,
+					"created_at"
+				)
+				SELECT st_geomfromtext(geom, 4326), system, type, id, bike, address,NOW() FROM temp_mrt
+				ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,system = EXCLUDED.system,servicetype = EXCLUDED.servicetype,stationposition = EXCLUDED.stationposition,updated_at = NOW();`
 			b, err := db.Begin(ctx)
 			if err != nil {
-				log.Println(err.Error())
+				log.Printf("[MRT] action=getmrt_station system=%s event=begin_error error=%v", system, err)
 				continue
 			}
 			_, _ = b.Exec(ctx, c1)
 			_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"geom", "system", "type", "id", "bike"}, pgx.CopyFromRows(row))
 			if err == nil {
-				b.Exec(ctx, c2)
-				b.Commit(ctx)
-				log.Println("mrt station updated_" + system)
+				if _, execErr := b.Exec(ctx, c2); execErr != nil {
+					log.Printf("[MRT] action=getmrt_station system=%s event=exec_error error=%v", system, execErr)
+				}
+				if commitErr := b.Commit(ctx); commitErr != nil {
+					log.Printf("[MRT] action=getmrt_station system=%s event=commit_error error=%v", system, commitErr)
+				} else {
+					log.Printf("[MRT] action=getmrt_station system=%s event=success station_count=%d", system, len(row))
+				}
 			} else {
-				log.Println(err.Error())
+				log.Printf("[MRT] action=getmrt_station system=%s event=copyfrom_error error=%v", system, err)
 				_ = b.Rollback(ctx)
 			}
 		}
 		flipopen()
 	}
+	log.Printf("[MRT] action=getmrt_station event=complete")
 }
 func getmrt_firstlast(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[MRT] action=getmrt_firstlast event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
+		log.Printf("[MRT] action=getmrt_firstlast system=%s event=system_start", system)
 		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/FirstLastTimetable/%s", system), "mrt_firstlast")
 		if err != nil || !comp {
+			log.Printf("[MRT] action=getmrt_firstlast system=%s event=skip reason=api_error", system)
 			return
 		}
 		if _, err := dec.Token(); err != nil {
 			flipopen()
+			log.Printf("[MRT] action=getmrt_firstlast system=%s event=decode_error error=%v", system, err)
 			return
 		}
 		func() {
@@ -177,32 +193,42 @@ func getmrt_firstlast(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) 
 					SELECT id,lid, dsid, dsname, ft, lt,mask,sys,NOW() FROM temp_mrt;`
 				b, err := db.Begin(ctx)
 				if err != nil {
-					log.Println(err.Error())
+					log.Printf("[MRT] action=getmrt_firstlast system=%s event=begin_error error=%v", system, err)
 					return
 				}
 				_, _ = b.Exec(ctx, c1)
 				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"id", "lid", "dsid", "dsname", "ft", "lt", "mask", "sys"}, pgx.CopyFromRows(row))
 				if err == nil {
-					b.Exec(ctx, c2)
-					b.Commit(ctx)
-					log.Println("mrt firtlast updated_" + system)
+					if _, execErr := b.Exec(ctx, c2); execErr != nil {
+						log.Printf("[MRT] action=getmrt_firstlast system=%s event=exec_error error=%v", system, execErr)
+					}
+					if commitErr := b.Commit(ctx); commitErr != nil {
+						log.Printf("[MRT] action=getmrt_firstlast system=%s event=commit_error error=%v", system, commitErr)
+					} else {
+						log.Printf("[MRT] action=getmrt_firstlast system=%s event=success row_count=%d", system, len(row))
+					}
 				} else {
-					log.Println(err.Error())
+					log.Printf("[MRT] action=getmrt_firstlast system=%s event=copyfrom_error error=%v", system, err)
 					_ = b.Rollback(ctx)
 				}
 			}
 		}()
 	}
+	log.Printf("[MRT] action=getmrt_firstlast event=complete")
 }
-func mrt_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func mrt_eta(client *resty.Client, rc *redis.Client) {
+	log.Printf("[MRT_ETA] action=mrt_eta event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
+		log.Printf("[MRT_ETA] action=mrt_eta system=%s event=system_start", system)
 		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/Metro/LiveBoard/%s", system), "mrt_LiveBoard")
 		if err != nil || !comp {
+			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=skip reason=api_error", system)
 			return
 		}
 		if _, err := dec.Token(); err != nil {
 			flipopen()
+			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=decode_error error=%v", system, err)
 			return
 		}
 		func() {
@@ -231,5 +257,5 @@ func mrt_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 			_, _ = pipe.Exec()
 		}()
 	}
-	log.Println("mrt eta done")
+	log.Printf("[MRT_ETA] action=mrt_eta event=complete")
 }

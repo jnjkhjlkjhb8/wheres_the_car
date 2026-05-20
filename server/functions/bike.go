@@ -44,19 +44,25 @@ type bike_availability struct {
 }
 
 func bike_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[BIKE] action=bike_static event=start")
 	getbike_station(client, rc, db)
+	log.Printf("[BIKE] action=bike_static event=complete")
 }
 func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[BIKE] action=getbike_station event=start")
 	for _, city := range cities {
 		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" {
 			continue
 		}
+		log.Printf("[BIKE] action=getbike_station city=%s event=city_start", city)
 		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Station/City/%s", city), "bike_stations")
 		if err != nil || !comp {
+			log.Printf("[BIKE] action=getbike_station city=%s event=skip reason=api_error", city)
 			return
 		}
 		if _, err := dec.Token(); err != nil {
 			flipopen()
+			log.Printf("[BIKE] action=getbike_station city=%s event=decode_error error=%v", city, err)
 			return
 		}
 		func() {
@@ -107,28 +113,37 @@ func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 				_, _ = b.Exec(ctx, c1)
 				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bike"}, []string{"uid", "id", "name", "cap", "type", "geom", "addr"}, pgx.CopyFromRows(row))
 				if err == nil {
-					b.Exec(ctx, c2)
-					b.Commit(ctx)
-					log.Println("bike station updated_" + city)
+					if _, execErr := b.Exec(ctx, c2); execErr != nil {
+						log.Printf("[BIKE] action=getbike_station city=%s event=exec_error error=%v", city, execErr)
+					}
+					if commitErr := b.Commit(ctx); commitErr != nil {
+						log.Printf("[BIKE] action=getbike_station city=%s event=commit_error error=%v", city, commitErr)
+					} else {
+						log.Printf("[BIKE] action=getbike_station city=%s event=success station_count=%d", city, len(row))
+					}
 				} else {
-					log.Println(err.Error())
+					log.Printf("[BIKE] action=getbike_station city=%s event=copyfrom_error error=%v", city, err)
 					_ = b.Rollback(ctx)
 				}
 			}
 		}()
 	}
-	log.Println("bike station updated")
+	log.Printf("[BIKE] action=getbike_station event=complete")
 }
-func bike_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func bike_eta(client *resty.Client, rc *redis.Client) {
+	log.Printf("[BIKE_ETA] action=bike_eta event=start")
 	for _, city := range cities {
 		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" {
 			continue
 		}
+		log.Printf("[BIKE_ETA] action=bike_eta city=%s event=city_start", city)
 		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability")
 		if err != nil || !comp {
+			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=api_error", city)
 			continue
 		}
 		if _, err := dec.Token(); err != nil {
+			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=decode_error error=%v", city, err)
 			continue
 		}
 		func() {
@@ -155,5 +170,5 @@ func bike_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 			_, _ = pipe.Exec()
 		}()
 	}
-	log.Println("bike eta done")
+	log.Printf("[BIKE_ETA] action=bike_eta event=complete")
 }

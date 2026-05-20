@@ -44,28 +44,43 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	defer rc.Close()
+	defer func(rc *redis.Client) {
+		err := rc.Close()
+		if err != nil {
+
+		}
+	}(rc)
 	defer db.Close()
 	r.POST("/daily", func(ctx *gin.Context) {
-		log.Println("⚡ Azure Trigger: Daily static sync job started.")
+		log.Println("[AZURE] action=daily event=start")
 		bus_static(c, rc, db)
 		bike_static(c, rc, db)
 		mrt_static(c, rc, db)
 		rail_static(c, rc, db)
+		log.Println("[AZURE] action=daily event=end")
 	})
-	r.POST("/2min", func(ctx *gin.Context) {
-		log.Println("⚡ Azure Trigger: 2min static sync job started.")
+	r.POST("tra", func(ctx *gin.Context) {
+		log.Println("[AZURE] action=tra event=start")
 		tra_eta(c, rc)
+		log.Println("[AZURE] action=tra event=end")
 	})
-	r.POST("/1min", func(ctx *gin.Context) {
-		bike_eta(c, rc, db)
+	r.POST("bike", func(ctx *gin.Context) {
+		log.Println("[AZURE] action=bike event=start")
+		bike_eta(c, rc)
+		log.Println("[AZURE] action=bike event=end")
 	})
-	r.POST("/10s", func(ctx *gin.Context) {
+	r.POST("bus", func(ctx *gin.Context) {
+		log.Println("[AZURE] action=bus event=start")
 		Bus_eta(c, rc, db)
-		mrt_eta(c, rc, db)
+		mrt_eta(c, rc)
+		log.Println("[AZURE] action=bus event=end")
 	})
 	port := get_port()
-	r.Run(port)
+	err := r.Run(port)
+	if err != nil {
+		log.Printf("[RUN] action=fail-listen-port error=%v", err)
+		panic(err)
+	}
 }
 
 // basic func
@@ -76,12 +91,21 @@ func call_api(client *resty.Client, rc *redis.Client, url string, name string) (
 		return json.Decoder{}, false, err, nil
 	}
 	if resp.StatusCode() == 304 {
-		resp.RawResponse.Body.Close()
+		err := resp.RawResponse.Body.Close()
+		if err != nil {
+			log.Printf("[RUN] action=fail-set-response error=%v", err)
+			return json.Decoder{}, false, err, nil
+		}
 		return json.Decoder{}, false, nil, nil
 	}
 	rc.Set("LastTimeGet_"+name, time.Now(), 0)
 	decorder := json.NewDecoder(resp.RawResponse.Body)
-	return *decorder, true, nil, func() { resp.RawResponse.Body.Close() }
+	return *decorder, true, nil, func() {
+		err := resp.RawResponse.Body.Close()
+		if err != nil {
+			log.Printf("[RUN] action=fail-close-response error=%v", err)
+		}
+	}
 }
 func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
 	mp := make(map[string]raw_Bus_Position)
@@ -127,7 +151,7 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 	}
 	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"sub_route_uid", "direction", "stop_uid", "estimate_time", "stop_status", "plate_numb", "bus_position", "gps_time", "src_update_time"}, pgx.CopyFromRows(rows))
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf("[BUS] action=savebushistory event=copyfrom_error error=%v row_count=%d", err, len(rows))
 		return
 	}
 	c1 := `INSERT INTO bus_eta_history (
@@ -154,9 +178,13 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 		FROM temp_bus_history;`
 	_, err = b.Exec(ctx, c1)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Printf("[BUS] action=savebushistory event=insert_error error=%v", err)
 	}
-	b.Commit(ctx)
+	if commitErr := b.Commit(ctx); commitErr != nil {
+		log.Printf("[BUS] action=savebushistory event=commit_error error=%v", commitErr)
+	} else {
+		log.Printf("[BUS] action=savebushistory event=complete row_count=%d", len(rows))
+	}
 }
 func busstaticmp(db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
 	var query string
@@ -204,20 +232,24 @@ func connectredis() *redis.Client {
 	})
 	pong, err := client.Ping().Result()
 	if err != nil {
+		log.Printf("[REDIS] action=connect event=failed error=%v", err)
 		panic(err)
 	}
-	fmt.Println(pong, err)
+	log.Printf("[REDIS] action=connect event=success pong=%s", pong)
 	return client
 }
 func connectdb() *pgxpool.Pool {
 	conn, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
+		log.Printf("[DB] action=connect event=failed error=%v", err)
 		panic(err)
 	}
 	err = conn.Ping(context.Background())
 	if err != nil {
+		log.Printf("[DB] action=ping event=failed error=%v", err)
 		panic(err)
 	}
+	log.Printf("[DB] action=connect event=success")
 	return conn
 }
 func getToken(rc *redis.Client, c *resty.Client) string {
@@ -255,12 +287,15 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 	} else {
 		target = fmt.Sprintf("/v2/Bus/%s/City/%s", api, city)
 	}
+	log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_call", city, api)
 	dec, comp, err, flipopen := call_api(client, rc, target, "bus_"+api+city)
 	if err != nil || !comp {
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_skip reason=error_or_304", city, api)
 		return
 	}
 	defer flipopen()
 	if _, err := dec.Token(); err != nil {
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=decode_error error=%v", city, api, err)
 		return
 	}
 	var raw_rows [][]interface{}
@@ -275,7 +310,7 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 			var r raw_Bus_Route
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
-				fmt.Println(err.Error())
+				log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=unmarshal_error error=%v", city, api, err)
 			}
 			for _, sub := range r.SubRoutes {
 				dep, dest := sub.DepartureStopNameZh, sub.DestinationStopNameZh
@@ -333,9 +368,10 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 	}
 	if len(raw_rows) > 0 {
 		from, err := db.CopyFrom(ctx, pgx.Identifier{"raw_bus_route"}, []string{"sub_route_uid", "route_uid", "route_name", "sub_route_name", "depart", "destin", "type", "content"}, pgx.CopyFromRows(raw_rows))
-		fmt.Println(from, err)
 		if err != nil {
-			fmt.Println(from, err)
+			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_error error=%v rows=%d", city, api, err, from)
+		} else {
+			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_success rows=%d", city, api, from)
 		}
 	}
 }
