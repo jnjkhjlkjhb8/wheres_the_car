@@ -1,6 +1,14 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
-
+service request_thsr{
+  rpc fare(ask_static) returns (thsa_fare) {}
+  rpc timetable(ask_static) returns (thsa_timetable) {}
+}
+message ask_static{
+  string date = 1;
+  string origin_station_id = 2;
+  string destination_station_id = 3;
+}
 message thsa_fare {
   string origin_station_id = 1;
   string destination_station_id = 2;

@@ -1,6 +1,23 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
-
+service rquest_station{
+  rpc live_board(ask_staiton) returns (stream tra_LiveBoards) {}
+  rpc timetable(ask_staiton) returns (tra_timetable) {}
+}
+service request_route{
+  rpc timetable(ask_route) returns (tra_timetable) {}
+  rpc fare(ask_staiton) returns (TraFareItem) {}
+  rpc delay(ask_route) returns (stream tra_delay) {}
+}
+message ask_route{
+  string date = 1;
+  string origin_station_id = 2;
+  string destination_station_id = 3;
+}
+message ask_staiton{
+  string station_id = 1;
+  string date = 2;
+}
 message TraFareItem {
   string origin_station_id = 1;
   string destination_station_id = 2;

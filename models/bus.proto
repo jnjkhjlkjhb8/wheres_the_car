@@ -1,0 +1,98 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+service request_route{
+  rpc static(requestroute) returns (subroute) {}
+  rpc eta(requestroute) returns (stream Bus_RouteArrival) {}
+}
+service request_station{
+  rpc static(requeststation) returns (stream Bus_StationArrival) {}
+}
+message requestroute {
+  string SubRouteUID = 1;
+}
+message requeststation{
+  string StationUID = 1;
+}
+message subroute{
+  string RouteUID = 1;
+  string RouteName = 2;
+  string SubRouteUID = 3;
+  string SubRouteName = 4;
+  map<int32,Direction> Directions = 7;
+}
+
+message Direction{
+  string DepartureStopName = 1;
+  string DestinationStopName = 2;
+  string Geometry = 3;
+  repeated stop Stops = 4;
+}
+
+message stop{
+  string StopUID = 1;
+  string StopName = 2;
+  int32 StopSequence = 3;
+  double PositionLon = 4;
+  double PositionLat = 5;
+  string StationID = 6;
+}
+
+message RouteOfStop{
+  string SubRouteUID = 2;
+  int32 Direction = 3;
+  repeated stop Stops = 4;
+}
+
+message Shape{
+  string SubRouteUID = 1;
+  int32 Direction = 2;
+  string Geometry = 3;
+}
+
+message Station{
+  string StationUID = 1;
+  string StationName = 2;
+  string city = 3;
+  double PositionLon = 4;
+  double PositionLat = 5;
+}
+
+message Bus_RouteArrival{
+  string sub_route_uid = 1;
+  repeated Bus_RouteEstimate stops = 3;
+}
+message Bus_StationArrival{
+  string station_name = 1;
+  repeated string station_uid = 2;
+  repeated Bus_StopEstimate routes = 3;
+}
+message Bus_RouteEstimate{
+  string stop_uid = 1;
+  int32 direction = 2;
+  int32 estimate = 3;
+  string NextBusTime = 4;
+  int32 Stop_status = 5;
+  string src_update_time = 6;
+  repeated Bus_position Buses = 7;
+}
+message Bus_StopEstimate{
+  string stop_uid = 1;
+  string sub_route_uid = 2;
+  string route_name = 3;
+  int32 Direction = 4;
+  int32 estimate = 5;
+  string NextBusTime = 6;
+  int32 Stop_status = 7;
+  string src_update_time = 8;
+  repeated Bus_position Buses = 9;
+}
+message Bus_position{
+  string plate_numb = 1;
+  double position_lon = 2;
+  double position_lat = 3;
+  int32 speed = 4;
+  int32 azimuth = 5;
+  int32 DutyStatus = 6;
+  int32 BusStatus = 7;
+  string gps_time = 8;
+}

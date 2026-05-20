@@ -1,7 +1,23 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 
-message bike{
+service request_bike{
+  rpc static(bike_request) returns (bike_static) {}
+  rpc eta(bike_request) returns (stream bike_eta) {}
+}
+message bike_request{
+  string lat = 1;
+  string lon = 2;
+}
+message bike_static{
+  string StationUID = 1;
+  string name = 2;
+  int32 service_type = 3;
+  string Lat = 4;
+  string Lon = 5;
+  string address = 6;
+}
+message bike_eta{
   string StationUID = 1;
   int32 ServiceStatus = 2;
   int32 ServiceType = 3;
