@@ -13,16 +13,10 @@
     "version": "[4.*, 5.0.0)"
   },
   "logging": {
-    "fileLoggingMode": "debugOnly",
+    "fileLoggingMode": "always",
     "logLevel": {
       "Function": "Information",
       "default": "Information"
-    },
-    "applicationInsights": {
-      "samplingSettings": {
-        "isEnabled": true,
-        "maxTelemetryItemsPerSecond": 20
-      }
     }
   }
 }
