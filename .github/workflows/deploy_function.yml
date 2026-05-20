@@ -36,9 +36,9 @@ jobs:
           mkdir -p package
           cp server/functions/handler package/
           cp host.json package/
-          cp -r server/functions/1min package/
-          cp -r server/functions/2min package/
-          cp -r server/functions/10s package/
+          cp -r server/functions/bike package/
+          cp -r server/functions/bus package/
+          cp -r server/functions/train package/
           cp -r server/functions/daily package/
       - name: upload
         uses: actions/upload-artifact@v4
