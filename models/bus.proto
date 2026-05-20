@@ -5,7 +5,7 @@ service request_route{
   rpc eta(requestroute) returns (stream Bus_RouteArrival) {}
 }
 service request_station{
-  rpc static(requeststation) returns (stream Bus_StationArrival) {}
+  rpc eta(requeststation) returns (stream Bus_StationArrival) {}
 }
 message requestroute {
   string SubRouteUID = 1;

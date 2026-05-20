@@ -339,12 +339,14 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 		}
 	}
 }
-func mask(mon, tues, wed, thur, fri, satur, sun, national bool) uint8 {
-	var res uint8
-	days := []bool{mon, tues, wed, thur, fri, satur, sun, national}
-	for i, v := range days {
-		if v {
-			res |= 1 << i
+func mask(sd struct{ Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday bool }) string {
+	day := [7]bool{sd.Sunday, sd.Monday, sd.Tuesday, sd.Wednesday, sd.Thursday, sd.Friday, sd.Saturday}
+	res := ""
+	for _, b := range day {
+		if b == true {
+			res += "1"
+		} else {
+			res += "0"
 		}
 	}
 	return res
