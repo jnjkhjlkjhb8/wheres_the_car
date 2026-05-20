@@ -43,7 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
-temp.json
 temp1.json
 ios/Runner/AppDelegate.swift
 token.env
@@ -51,3 +50,4 @@ token.env
 android/app/build.gradle.kts
 .gitignore
 android/app/src/main/AndroidManifest.xml
+server/router/server.go

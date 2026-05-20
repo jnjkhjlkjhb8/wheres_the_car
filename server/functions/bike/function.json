@@ -3,7 +3,7 @@
     {
       "type": "timerTrigger",
       "direction": "in",
-      "name": "1minute",
+      "name": "bike",
       "schedule": "0 */1 * * * *"
     }
   ]

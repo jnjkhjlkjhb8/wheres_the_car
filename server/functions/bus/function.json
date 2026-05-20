@@ -3,8 +3,8 @@
     {
       "type": "timerTrigger",
       "direction": "in",
-      "name": "2minute",
-      "schedule": "0 */2 * * * *"
+      "name": "bus",
+      "schedule": "*/10 * * * * *"
     }
   ]
 }

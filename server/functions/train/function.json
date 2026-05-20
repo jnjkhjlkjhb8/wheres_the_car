@@ -3,8 +3,8 @@
     {
       "type": "timerTrigger",
       "direction": "in",
-      "name": "10s",
-      "schedule": "*/10 * * * * *"
+      "name": "train",
+      "schedule": "0 */2 * * * *"
     }
   ]
 }
