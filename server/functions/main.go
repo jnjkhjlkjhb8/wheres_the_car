@@ -44,13 +44,12 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	defer func(rc *redis.Client) {
-		err := rc.Close()
-		if err != nil {
-
-		}
-	}(rc)
-	defer db.Close()
+	port := get_port()
+	err := r.Run(port)
+	if err != nil {
+		log.Printf("[RUN] action=fail-listen-port error=%v", err)
+		panic(err)
+	}
 	r.POST("/daily", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=daily event=start")
 		bus_static(c, rc, db)
@@ -75,12 +74,13 @@ func main() {
 		mrt_eta(c, rc)
 		log.Println("[AZURE] action=bus event=end")
 	})
-	port := get_port()
-	err := r.Run(port)
-	if err != nil {
-		log.Printf("[RUN] action=fail-listen-port error=%v", err)
-		panic(err)
-	}
+	defer func(rc *redis.Client) {
+		err := rc.Close()
+		if err != nil {
+
+		}
+	}(rc)
+	defer db.Close()
 }
 
 // basic func

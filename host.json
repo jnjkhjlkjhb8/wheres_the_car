@@ -3,7 +3,7 @@
   "customHandler": {
     "description": {
       "defaultExecutablePath": "handler",
-      "workingDirectory": "server/functions",
+      "workingDirectory": "",
       "arguments": []
     },
     "enableForwardingHttpRequest": true
