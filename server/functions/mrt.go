@@ -147,7 +147,7 @@ func getmrt_firstlast(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) 
 						temp.DestinationStationName,
 						temp.FirstTrainTime,
 						temp.LastTrainTime,
-						mask(temp.ServiceDay.Monday, temp.ServiceDay.Tuesday, temp.ServiceDay.Wednesday, temp.ServiceDay.Thursday, temp.ServiceDay.Friday, temp.ServiceDay.Saturday, temp.ServiceDay.Sunday, temp.ServiceDay.NationalHolidays),
+						mask(temp.ServiceDay.Monday, temp.ServiceDay.Tuesday, temp.ServiceDay.Wednesday, temp.ServiceDay.Thursday, temp.ServiceDay.Friday, temp.ServiceDay.Saturday, temp.ServiceDay.Sunday),
 						system,
 					})
 				}

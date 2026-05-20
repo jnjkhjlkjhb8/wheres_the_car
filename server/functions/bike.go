@@ -137,7 +137,7 @@ func bike_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 			for dec.More() {
 				var temp bike_availability
 				if err := dec.Decode(&temp); err == nil {
-					raw := &models.Bike{
+					raw := &models.BikeEta{
 						StationUID:           temp.StationUID,
 						ServiceStatus:        int32(temp.ServiceStatus),
 						ServiceType:          int32(temp.ServiceType),
