@@ -27,11 +27,6 @@ func get_port() string {
 func main() {
 	r := gin.Default()
 	c := resty.New()
-	err := r.Run(get_port())
-	if err != nil {
-		log.Printf("[RUN] action=fail-listen-port error=%v", err)
-		panic(err)
-	}
 	rc := connectredis()
 	db := connectdb()
 	c.SetAuthToken(getToken(rc, c)).
@@ -100,6 +95,11 @@ func main() {
 			"status":  "done",
 		})
 	})
+	err := r.Run(get_port())
+	if err != nil {
+		log.Printf("[RUN] action=fail-listen-port error=%v", err)
+		panic(err)
+	}
 	defer func(rc *redis.Client) {
 		err := rc.Close()
 		if err != nil {
