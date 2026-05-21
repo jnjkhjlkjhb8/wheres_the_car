@@ -51,5 +51,4 @@ android/app/build.gradle.kts
 .gitignore
 android/app/src/main/AndroidManifest.xml
 server/router/server.go
-server/router/go.mod
-server/router/go.sum
+server/router/Dockerfile
