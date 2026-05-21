@@ -9,6 +9,7 @@ class Markermaker {
     final PictureInfo pictureInfo = await vg.loadPicture(loader,null);
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final ui.Canvas canvas = ui.Canvas(recorder);
+    var size = 10;
     canvas.scale(size / pictureInfo.size.width, size / pictureInfo.size.width);
     canvas.drawPicture(pictureInfo.picture);
     final ui.Image image = await recorder.endRecording().toImage(size,size);

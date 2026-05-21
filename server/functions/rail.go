@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/jnjkhjlkjhb8/bus/models"
 
 	"fmt"
@@ -149,25 +147,62 @@ func tra_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 		log.Printf("[RAIL] action=tra_station event=decode_error error=%v", err)
 		return
 	}
-	c1 := `INSERT INTO tra_stations (
-                          station_id,
-                          name,
-                          city,
-                          geom,
-                          updated_at
-                          )
-			VALUES ($1, $2, $3,ST_GeomFromText($4, 4326), NOW())
-			ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW();`
-	batch := &pgx.Batch{}
+	var row [][]interface{}
 	for dec.More() {
 		var temp rail_Station
 		if err := dec.Decode(&temp); err == nil {
 			g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
-			batch.Queue(c1, temp.StationID, temp.StationName.ZhTw, temp.LocationCity, g)
+			row = append(row, []interface{}{
+				temp.StationID,
+				temp.StationName.ZhTw,
+				temp.LocationCity,
+				g,
+			})
 		}
 	}
-	b := db.SendBatch(ctx, batch)
-	_ = b.Close()
+	if len(row) > 0 {
+		c1 := `CREATE TEMP TABLE temp_tra (
+					station_id text,
+					name text,
+					city text,
+					geom text
+				) ON COMMIT DROP;`
+		c2 := `INSERT INTO tra_stations (
+					station_id,
+					name,
+					city,
+					geom
+				)
+				SELECT station_id, name, city, ST_GeomFromText(geom, 4326)
+				FROM temp_tra
+				ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name, city = EXCLUDED.city, geom = EXCLUDED.geom;`
+		b, err := db.Begin(ctx)
+		if err != nil {
+			log.Printf("[RAIL] action=tra_station event=tx_error error=%v", err)
+			return
+		}
+		defer b.Rollback(ctx)
+		if _, err := b.Exec(ctx, c1); err != nil {
+			log.Printf("[RAIL] action=tra_station event=create_temp_error error=%v", err)
+			return
+		}
+		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_tra"}, []string{"station_id", "name", "city", "geom"}, pgx.CopyFromRows(row))
+		if err == nil {
+			if _, err = b.Exec(ctx, c2); err != nil {
+				log.Printf("[RAIL] action=tra_station event=exec_error error=%v", err)
+				return
+			}
+			if err = b.Commit(ctx); err != nil {
+				log.Printf("[RAIL] action=tra_station event=commit_error error=%v", err)
+			} else {
+				log.Printf("[RAIL] action=tra_station event=success station_count=%d", len(row))
+			}
+		} else {
+			log.Printf("[RAIL] action=tra_station event=copyfrom_error error=%v", err)
+		}
+	} else {
+		log.Printf("[RAIL] action=tra_station event=complete reason=no_data")
+	}
 	log.Printf("[RAIL] action=tra_station event=complete")
 }
 func thsr_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
@@ -216,34 +251,52 @@ func tra_fare(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 		log.Printf("[RAIL] action=tra_fare event=decode_error error=%v", err)
 		return
 	}
-	var rows [][]interface{}
+	var row [][]interface{}
 	for dec.More() {
 		var temp rail_Fare
 		if err := dec.Decode(&temp); err == nil {
 			for _, t1 := range temp.Fares {
-				rows = append(rows, []interface{}{temp.OriginStationID, temp.DestinationStationID, t1.TicketType, t1.Price})
+				row = append(row, []interface{}{temp.OriginStationID, temp.DestinationStationID, t1.TicketType, t1.Price})
 			}
 		}
 	}
+	c1 := `CREATE TEMP TABLE temp_tra_fare (
+				origin_station_id text,
+				destination_station_id text,
+				ticket_type text,
+				price int
+			) ON COMMIT DROP;`
+	c2 := `INSERT INTO tra_fares (
+				origin_station_id,
+				destination_station_id,
+				ticket_type,
+				price
+			)
+			SELECT origin_station_id, destination_station_id, ticket_type, price FROM temp_tra_fare
+			ON CONFLICT (origin_station_id, destination_station_id, ticket_type) 
+			DO UPDATE SET price = EXCLUDED.price`
 	b, err := db.Begin(ctx)
 	if err != nil {
 		log.Printf("[RAIL] action=tra_fare event=begin_error error=%v", err)
 		return
 	}
-	defer func(b pgx.Tx, ctx context.Context) {
-		err := b.Rollback(ctx)
-		if err != nil {
-			log.Printf("[RAIL] action=tra_fare event=rollback_error error=%v", err)
-		}
-	}(b, ctx)
-	_, err = b.Exec(ctx, `TRUNCATE TABLE tra_fares;`)
+	defer b.Rollback(ctx)
+	_, err = b.Exec(ctx, c1)
 	if err != nil {
 		log.Printf("[RAIL] action=tra_fare event=execute_error error=%v", err)
+		return
 	}
-	_, err = b.CopyFrom(ctx, pgx.Identifier{"tra_fares"}, []string{"origin_station_id", "destination_station_id", "ticket_type", "price"}, pgx.CopyFromRows(rows))
+	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_tra_fare"}, []string{"origin_station_id", "destination_station_id", "ticket_type", "price"}, pgx.CopyFromRows(row))
 	if err == nil {
-		_ = b.Commit(ctx)
-		log.Printf("[RAIL] action=tra_fare event=complete row_count=%d", len(rows))
+		if _, execErr := b.Exec(ctx, c2); execErr != nil {
+			log.Printf("[RAIL] action=tra_fare event=exec_error error=%v", execErr)
+			return
+		}
+		if commitErr := b.Commit(ctx); commitErr != nil {
+			log.Printf("[RAIL] action=tra_fare event=commit_error error=%v", commitErr)
+		} else {
+			log.Printf("[RAIL] action=tra_fare event=complete row_count=%d", len(row))
+		}
 	} else {
 		log.Printf("[RAIL] action=tra_fare event=copyfrom_error error=%v", err)
 	}

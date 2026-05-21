@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,11 +29,11 @@ func main() {
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
-	c.SetBaseURL("https://tdx.transportdata.tw/api/basic").
+	c.SetAuthToken(getToken(rc, c)).
+		SetBaseURL("https://tdx.transportdata.tw/api/basic").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "br,gzip").
 		SetDoNotParseResponse(true).
-		SetAuthToken(getToken(rc, c)).
 		SetRetryCount(5).
 		SetRetryWaitTime(1 * time.Second).
 		SetRetryMaxWaitTime(5 * time.Second).
@@ -44,12 +45,13 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	port := get_port()
-	err := r.Run(port)
-	if err != nil {
-		log.Printf("[RUN] action=fail-listen-port error=%v", err)
-		panic(err)
-	}
+	//port := get_port()
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "pong",
+			"status":  "healthy",
+		})
+	})
 	r.POST("/daily", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=daily event=start")
 		bus_static(c, rc, db)
@@ -57,23 +59,47 @@ func main() {
 		mrt_static(c, rc, db)
 		rail_static(c, rc, db)
 		log.Println("[AZURE] action=daily event=end")
+		ctx.JSON(200, gin.H{
+			"message": "daily",
+			"status":  "done",
+		})
 	})
-	r.POST("tra", func(ctx *gin.Context) {
+	r.POST("/tra", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=tra event=start")
 		tra_eta(c, rc)
 		log.Println("[AZURE] action=tra event=end")
+		ctx.JSON(200, gin.H{
+			"message": "tra",
+			"status":  "done",
+		})
 	})
-	r.POST("bike", func(ctx *gin.Context) {
+	r.POST("/bike", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=bike event=start")
 		bike_eta(c, rc)
 		log.Println("[AZURE] action=bike event=end")
+		ctx.JSON(200, gin.H{
+			"message": "bike",
+			"status":  "done",
+		})
 	})
-	r.POST("bus", func(ctx *gin.Context) {
+	r.POST("/bus", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=bus event=start")
 		Bus_eta(c, rc, db)
 		mrt_eta(c, rc)
+		ctx.JSON(200, gin.H{
+			"status": "ok",
+		})
 		log.Println("[AZURE] action=bus event=end")
+		ctx.JSON(200, gin.H{
+			"message": "bus",
+			"status":  "done",
+		})
 	})
+	err := r.Run(get_port())
+	if err != nil {
+		log.Printf("[RUN] action=fail-listen-port error=%v", err)
+		panic(err)
+	}
 	defer func(rc *redis.Client) {
 		err := rc.Close()
 		if err != nil {
@@ -93,12 +119,12 @@ func call_api(client *resty.Client, rc *redis.Client, url string, name string) (
 	if resp.StatusCode() == 304 {
 		err := resp.RawResponse.Body.Close()
 		if err != nil {
-			log.Printf("[RUN] action=fail-set-response error=%v", err)
 			return json.Decoder{}, false, err, nil
 		}
+		log.Printf("[RUN] action=no update=%s", name)
 		return json.Decoder{}, false, nil, nil
 	}
-	rc.Set("LastTimeGet_"+name, time.Now(), 0)
+	rc.Set("LastTimeGet_"+name, resp.Header().Get("Last-Modified"), 0)
 	decorder := json.NewDecoder(resp.RawResponse.Body)
 	return *decorder, true, nil, func() {
 		err := resp.RawResponse.Body.Close()
@@ -149,7 +175,7 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 		fmt.Println(err.Error())
 		return
 	}
-	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"sub_route_uid", "direction", "stop_uid", "estimate_time", "stop_status", "plate_numb", "bus_position", "gps_time", "src_update_time"}, pgx.CopyFromRows(rows))
+	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"uid", "dir", "suid", "est", "sts", "pl", "geom", "gps", "stime"}, pgx.CopyFromRows(rows))
 	if err != nil {
 		log.Printf("[BUS] action=savebushistory event=copyfrom_error error=%v row_count=%d", err, len(rows))
 		return
@@ -187,15 +213,17 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 	}
 }
 func busstaticmp(db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
-	var query string
-	var arg string
-	if city == "interCity" {
-		query = "SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence FROM bus_station_stop_map WHERE stop_uid LIKE $1"
-		arg = "THB%"
-	} else {
-		query = "SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence FROM bus_station_stop_map WHERE stop_uid LIKE $1"
-		arg = city + "%"
+	prefix := city
+	for k, v := range citymap {
+		if strings.EqualFold(k, city) {
+			prefix = v
+			break
+		}
 	}
+	query := `SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence 
+              FROM bus_station_stop_map 
+              WHERE sub_route_uid LIKE $1`
+	arg := prefix + "%"
 	rows, err := db.Query(ctx, query, arg)
 	if err != nil {
 		return nil, err
@@ -226,7 +254,7 @@ func makethatsame(city string, subRouteUID string, Direction uint8) (string, uin
 }
 func connectredis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     "10.1.1.4:6379",
+		Addr:     os.Getenv("REDIS_ADDR"),
 		Password: "",
 		DB:       0,
 	})
@@ -290,7 +318,7 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 	log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_call", city, api)
 	dec, comp, err, flipopen := call_api(client, rc, target, "bus_"+api+city)
 	if err != nil || !comp {
-		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_skip reason=error_or_304", city, api)
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_skip reason=empty", city, api)
 		return
 	}
 	defer flipopen()
@@ -375,15 +403,15 @@ func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, ci
 		}
 	}
 }
-func mask(Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday bool) string {
-	day := [7]bool{Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday}
-	res := ""
-	for _, b := range day {
-		if b == true {
-			res += "1"
-		} else {
-			res += "0"
+func mask(mon, tues, wed, thur, fri, satur, sun bool) uint8 {
+	var res uint8
+	days := []bool{mon, tues, wed, thur, fri, satur, sun}
+	for i, v := range days {
+		if v {
+			res |= 1 << i
 		}
 	}
 	return res
 }
+
+var citymap = map[string]string{"Taipei": "TPE", "NewTaipei": "NWT", "Taoyuan": "TAO", "Taichung": "TXG", "Tainan": "TNN", "Kaohsiung": "KHH", "Keelung": "KEE", "Hsinchu": "HSZ", "HsinchuCounty": "HSQ", "MiaoliCounty": "MIA", "ChanghuaCounty": "CHA", "NantouCounty": "NAN", "YunlinCounty": "YUN", "ChiayiCounty": "CYQ", "Chiayi": "CYI", "PingtungCounty": "PIF", "YilanCounty": "ILA", "HualienCounty": "HUA", "TaitungCounty": "TTT", "PenghuCounty": "PEN", "KinmenCounty": "KIN", "LienchiangCounty": "LIE", "InterCity": "THB"}

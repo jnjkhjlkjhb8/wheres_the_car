@@ -51,22 +51,23 @@ func bike_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BIKE] action=getbike_station event=start")
 	for _, city := range cities {
-		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" {
+		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" || city == "HualienCounty" {
 			continue
 		}
 		log.Printf("[BIKE] action=getbike_station city=%s event=city_start", city)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Station/City/%s", city), "bike_stations")
-		if err != nil || !comp {
-			log.Printf("[BIKE] action=getbike_station city=%s event=skip reason=api_error", city)
-			return
-		}
-		if _, err := dec.Token(); err != nil {
-			flipopen()
-			log.Printf("[BIKE] action=getbike_station city=%s event=decode_error error=%v", city, err)
-			return
-		}
+		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Station/City/%s", city), "bike_stations"+city)
 		func() {
-			defer flipopen()
+			if flipopen != nil {
+				defer flipopen()
+			}
+			if err != nil || !comp {
+				log.Printf("[BIKE] action=getbike_station city=%s event=skip reason=api_error=%s", city, err)
+				return
+			}
+			if _, err := dec.Token(); err != nil {
+				log.Printf("[BIKE] action=getbike_station city=%s event=decode_error error=%v", city, err.Error())
+				return
+			}
 			var row [][]interface{}
 			for dec.More() {
 				var temp bike_station
@@ -103,8 +104,8 @@ func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
                            address,
                            updated_at
 					)
-					SELECT uid, id, name, cap, type, st_geomfromtext(geom, 4326), address,NOW() FROM temp_bike 
-					ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,capacity = EXCLUDED.capacity,service_type = EXCLUDED.service_type,geom = EXCLUDED.geom,updated_at = NOW();`
+					SELECT uid, id, name, cap, type, st_geomfromtext(geom, 4326) AS temp, addr AS address,NOW() FROM temp_bike 
+					ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,capacity = EXCLUDED.capacity,service_type = EXCLUDED.service_type,geom = EXCLUDED.geom,address = EXCLUDED.address,updated_at = NOW();`
 				b, err := db.Begin(ctx)
 				if err != nil {
 					log.Println(err.Error())
@@ -133,13 +134,13 @@ func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 func bike_eta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[BIKE_ETA] action=bike_eta event=start")
 	for _, city := range cities {
-		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" {
+		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" || city == "HualienCounty" {
 			continue
 		}
 		log.Printf("[BIKE_ETA] action=bike_eta city=%s event=city_start", city)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability")
+		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability"+city)
 		if err != nil || !comp {
-			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=api_error", city)
+			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=api_error,error=%s", city, err)
 			continue
 		}
 		if _, err := dec.Token(); err != nil {
@@ -168,6 +169,7 @@ func bike_eta(client *resty.Client, rc *redis.Client) {
 				}
 			}
 			_, _ = pipe.Exec()
+			log.Printf("[BIKE_ETA] action= %s bike_eta event=complete", city)
 		}()
 	}
 	log.Printf("[BIKE_ETA] action=bike_eta event=complete")
