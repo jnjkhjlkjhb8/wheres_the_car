@@ -84,7 +84,7 @@ func main() {
 	})
 	r.POST("/bus", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=bus event=start")
-		Bus_eta(ctx, c, rc, db)
+		Bus_eta(context.Background(), c, rc, db)
 		mrt_eta(c, rc)
 		ctx.JSON(200, gin.H{
 			"status": "ok",
@@ -261,7 +261,7 @@ func connectredis() *redis.Client {
 	pong, err := client.Ping().Result()
 	if err != nil {
 		log.Printf("[REDIS] action=connect event=failed error=%v", err)
-		panic(err)
+		//panic(err)
 	}
 	log.Printf("[REDIS] action=connect event=success pong=%s", pong)
 	return client
@@ -270,12 +270,12 @@ func connectdb() *pgxpool.Pool {
 	conn, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Printf("[DB] action=connect event=failed error=%v", err)
-		panic(err)
+		//panic(err)
 	}
 	err = conn.Ping(context.Background())
 	if err != nil {
 		log.Printf("[DB] action=ping event=failed error=%v", err)
-		panic(err)
+		//panic(err)
 	}
 	log.Printf("[DB] action=connect event=success")
 	return conn
