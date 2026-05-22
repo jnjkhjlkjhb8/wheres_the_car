@@ -45,7 +45,7 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	//port := get_port()
+	port := get_port()
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
@@ -54,10 +54,10 @@ func main() {
 	})
 	r.POST("/daily", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=daily event=start")
-		bus_static(c, rc, db)
-		bike_static(c, rc, db)
-		mrt_static(c, rc, db)
-		rail_static(c, rc, db)
+		bus_static(ctx, c, rc, db)
+		bike_static(ctx, c, rc, db)
+		mrt_static(ctx, c, rc, db)
+		rail_static(ctx, c, rc, db)
 		log.Println("[AZURE] action=daily event=end")
 		ctx.JSON(200, gin.H{
 			"message": "daily",
@@ -84,18 +84,14 @@ func main() {
 	})
 	r.POST("/bus", func(ctx *gin.Context) {
 		log.Println("[AZURE] action=bus event=start")
-		Bus_eta(c, rc, db)
+		Bus_eta(ctx, c, rc, db)
 		mrt_eta(c, rc)
 		ctx.JSON(200, gin.H{
 			"status": "ok",
 		})
 		log.Println("[AZURE] action=bus event=end")
-		ctx.JSON(200, gin.H{
-			"message": "bus",
-			"status":  "done",
-		})
 	})
-	err := r.Run(get_port())
+	err := r.Run(port)
 	if err != nil {
 		log.Printf("[RUN] action=fail-listen-port error=%v", err)
 		panic(err)
@@ -133,7 +129,7 @@ func call_api(client *resty.Client, rc *redis.Client, url string, name string) (
 		}
 	}
 }
-func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
+func savebushistory(ctx context.Context, db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
 	mp := make(map[string]raw_Bus_Position)
 	var rows [][]interface{}
 	for _, b := range posit {
@@ -169,8 +165,12 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 	if len(rows) <= 0 {
 		return
 	}
-	b, _ := db.Begin(ctx)
-	_, err := b.Exec(ctx, "CREATE TEMP TABLE temp_bus_history (uid text, dir int2, suid text, est int4, sts int2,pl text, geom text,gps timestamptz,stime timestamptz) ON COMMIT DROP;")
+	b, err := db.Begin(ctx)
+	if err != nil {
+		log.Printf("[BUS] Begin tx error: %v", err)
+		return
+	}
+	_, err = b.Exec(ctx, "CREATE TEMP TABLE temp_bus_history (uid text, dir int2, suid text, est int4, sts int2,pl text, geom text,gps timestamptz,stime timestamptz) ON COMMIT DROP;")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -212,7 +212,7 @@ func savebushistory(db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Po
 		log.Printf("[BUS] action=savebushistory event=complete row_count=%d", len(rows))
 	}
 }
-func busstaticmp(db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
+func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
 	prefix := city
 	for k, v := range citymap {
 		if strings.EqualFold(k, city) {
@@ -308,7 +308,7 @@ func getToken(rc *redis.Client, c *resty.Client) string {
 	}
 	return val
 }
-func process_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
+func process_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
 	var target string
 	if city == "InterCity" {
 		target = fmt.Sprintf("/v2/Bus/%s/InterCity", api)

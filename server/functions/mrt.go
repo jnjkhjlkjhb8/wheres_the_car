@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/jnjkhjlkjhb8/bus/models"
 
 	"fmt"
@@ -60,13 +62,13 @@ type mrt_live struct {
 	EstimateTime  int32 `json:"EstimateTime"`
 }
 
-func mrt_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func mrt_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=mrt_static event=start")
-	getmrt_station(client, rc, db)
-	getmrt_firstlast(client, rc, db)
+	getmrt_station(ctx, client, rc, db)
+	getmrt_firstlast(ctx, client, rc, db)
 	log.Printf("[MRT] action=mrt_static event=complete")
 }
-func getmrt_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getmrt_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=getmrt_station event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
@@ -140,7 +142,7 @@ func getmrt_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	}
 	log.Printf("[MRT] action=getmrt_station event=complete")
 }
-func getmrt_firstlast(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getmrt_firstlast(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=getmrt_firstlast event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {

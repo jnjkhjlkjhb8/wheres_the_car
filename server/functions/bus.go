@@ -17,7 +17,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var ctx = context.Background()
 var cities = []string{
 	"Taipei", "NewTaipei", "Taoyuan", "Taichung", "Tainan", "Kaohsiung",
 	"Keelung", "Hsinchu", "HsinchuCounty", "MiaoliCounty", "ChanghuaCounty",
@@ -170,10 +169,10 @@ type bus_schedule_tb struct {
 	} `json:"StopTimes"`
 }
 
-func bus_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
-	dailyRoute(rc, client, db)
+func bus_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	dailyRoute(ctx, rc, client, db)
 }
-func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
+func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 	log.Printf("[BUS] action=dailyRoute event=start")
 	for _, city := range cities {
 		if city == "LienchiangCounty" {
@@ -186,7 +185,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
 		}
-		process_static(c, rc, db, city, "Route", func(raw []byte) {
+		process_static(ctx, c, rc, db, city, "Route", func(raw []byte) {
 			var r raw_Bus_Route
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -217,7 +216,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 				routeMap[r.RouteUID] = append(routeMap[r.RouteUID], uid)
 			}
 		})
-		process_static(c, rc, db, city, "StopOfRoute", func(raw []byte) {
+		process_static(ctx, c, rc, db, city, "StopOfRoute", func(raw []byte) {
 			var r raw_Stopofroute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -239,7 +238,7 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 				}
 			}
 		})
-		process_static(c, rc, db, city, "Shape", func(raw []byte) {
+		process_static(ctx, c, rc, db, city, "Shape", func(raw []byte) {
 			var r raw_Bus_Shape
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -263,16 +262,16 @@ func dailyRoute(rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 			}
 		})
 		//process_static(c, rc, db, city, "Schedule", func(raw []byte) {})
-		process_static(c, rc, db, city, "Station", func(raw []byte) {})
-		changetodbformat(db, subRoutemap)
-		savestations(db, city)
+		process_static(ctx, c, rc, db, city, "Station", func(raw []byte) {})
+		changetodbformat(ctx, db, subRoutemap)
+		savestations(ctx, db, city)
 		//saveschedule(db, city)
-		savestatictodb(db, subRoutemap)
+		savestatictodb(ctx, db, subRoutemap)
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_complete subroute_count=%d", city, len(subRoutemap))
 	}
 	log.Printf("[BUS] action=dailyRoute event=complete")
 }
-func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
+func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	var row [][]interface{}
 	for _, sub := range raw {
 		for dir, d := range sub.Directions {
@@ -348,7 +347,7 @@ func changetodbformat(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 		log.Printf("[BUS] action=changetodbformat event=commit_error error=%v", err)
 	}
 }
-func savestations(db *pgxpool.Pool, city string) {
+func savestations(ctx context.Context, db *pgxpool.Pool, city string) {
 	c1 := `
 			INSERT INTO bus_stations (
 									  station_uid,
@@ -371,7 +370,7 @@ func saveschedule(db *pgxpool.Pool, city string) {
 
 }
 
-func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
+func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	var row [][]interface{}
 	var mp [][]interface{}
 	for _, sub := range raw {
@@ -452,14 +451,14 @@ func savestatictodb(db *pgxpool.Pool, raw map[string]*models.Subroute) {
 	}
 }
 
-func Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BUS_ETA] action=Bus_eta event=start")
 	for _, city := range cities {
 		if city == "ChanghuaCounty" || city == "NantouCounty" {
 			continue
 		}
 		log.Printf("[BUS_ETA] action=Bus_eta city=%s event=city_start", city)
-		mp, err := busstaticmp(db, city)
+		mp, err := busstaticmp(ctx, db, city)
 		if err != nil || len(mp) <= 0 {
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=skip_empty reason=no_stations", city)
 			continue
@@ -586,7 +585,7 @@ func Bus_eta(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 		} else {
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=redis_success station_count=%d route_count=%d eat_count=%d posit_count=%d", city, len(stations), len(routes), len(eat), len(posit))
 		}
-		savebushistory(db, eat, posit)
+		savebushistory(ctx, db, eat, posit)
 	}
 	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }

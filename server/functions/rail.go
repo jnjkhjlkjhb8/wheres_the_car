@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/jnjkhjlkjhb8/bus/models"
 
 	"fmt"
@@ -128,14 +130,14 @@ type Tra_LiveBoard struct {
 	} `json:"AvailableSeats"`
 }*/
 
-func rail_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func rail_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=rail_static event=start")
-	tra_station(client, rc, db)
-	thsr_station(client, rc, db)
-	tra_fare(client, rc, db)
+	tra_station(ctx, client, rc, db)
+	thsr_station(ctx, client, rc, db)
+	tra_fare(ctx, client, rc, db)
 	log.Printf("[RAIL] action=rail_static event=complete")
 }
-func tra_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func tra_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=tra_station event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/Station", "tra_stations")
 	if err != nil || !comp {
@@ -205,7 +207,7 @@ func tra_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	}
 	log.Printf("[RAIL] action=tra_station event=complete")
 }
-func thsr_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func thsr_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=thsr_station event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/THSR/Station", "thsr_stations")
 	if err != nil || !comp {
@@ -239,7 +241,7 @@ func thsr_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	_ = b.Close()
 	log.Printf("[RAIL] action=thsr_station event=complete")
 }
-func tra_fare(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=tra_fare event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/ODFare", "tra_fare")
 	if err != nil || !comp {

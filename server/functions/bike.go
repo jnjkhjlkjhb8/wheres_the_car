@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -43,12 +44,12 @@ type bike_availability struct {
 	} `json:"AvailableRentBikesDetail"`
 }
 
-func bike_static(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func bike_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BIKE] action=bike_static event=start")
-	getbike_station(client, rc, db)
+	getbike_station(ctx, client, rc, db)
 	log.Printf("[BIKE] action=bike_static event=complete")
 }
-func getbike_station(client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getbike_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BIKE] action=getbike_station event=start")
 	for _, city := range cities {
 		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" || city == "HualienCounty" {
