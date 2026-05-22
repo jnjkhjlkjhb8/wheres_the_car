@@ -38,7 +38,7 @@ jobs:
           cp host.json package/
           cp -r server/functions/bike package/
           cp -r server/functions/bus package/
-          cp -r server/functions/train package/
+          cp -r server/functions/tra package/
           cp -r server/functions/daily package/
       - name: upload
         uses: actions/upload-artifact@v4
