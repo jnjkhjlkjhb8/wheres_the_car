@@ -32,10 +32,10 @@ type rail_Fare struct {
 	OriginStationID      string `json:"OriginStationID"`
 	DestinationStationID string `json:"DestinationStationID"`
 	Fares                []struct {
-		TicketType int32 `json:"TicketType"`
-		FareClass  int32 `json:"FareClass"`
-		CabinClass int32 `json:"CabinClass"`
-		Price      int32 `json:"Price"`
+		TicketType string `json:"TicketType"`
+		FareClass  int32  `json:"FareClass"`
+		CabinClass int32  `json:"CabinClass"`
+		Price      int32  `json:"Price"`
 	} `json:"Fares"`
 }
 
@@ -245,7 +245,7 @@ func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 	log.Printf("[RAIL] action=tra_fare event=start")
 	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/ODFare", "tra_fare")
 	if err != nil || !comp {
-		log.Printf("[RAIL] action=tra_fare event=skip reason=api_error")
+		log.Printf("[RAIL] action=tra_fare event=skip reason=api_error | noupdate")
 		return
 	}
 	defer flipopen()

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -213,18 +212,10 @@ func savebushistory(ctx context.Context, db *pgxpool.Pool, eat []raw_Bus_Esimate
 	}
 }
 func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
-	prefix := city
-	for k, v := range citymap {
-		if strings.EqualFold(k, city) {
-			prefix = v
-			break
-		}
-	}
 	query := `SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence 
               FROM bus_station_stop_map 
               WHERE sub_route_uid LIKE $1`
-	arg := prefix + "%"
-	rows, err := db.Query(ctx, query, arg)
+	rows, err := db.Query(ctx, query, city+"%")
 	if err != nil {
 		return nil, err
 	}
@@ -413,5 +404,3 @@ func mask(mon, tues, wed, thur, fri, satur, sun bool) uint8 {
 	}
 	return res
 }
-
-var citymap = map[string]string{"Taipei": "TPE", "NewTaipei": "NWT", "Taoyuan": "TAO", "Taichung": "TXG", "Tainan": "TNN", "Kaohsiung": "KHH", "Keelung": "KEE", "Hsinchu": "HSZ", "HsinchuCounty": "HSQ", "MiaoliCounty": "MIA", "ChanghuaCounty": "CHA", "NantouCounty": "NAN", "YunlinCounty": "YUN", "ChiayiCounty": "CYQ", "Chiayi": "CYI", "PingtungCounty": "PIF", "YilanCounty": "ILA", "HualienCounty": "HUA", "TaitungCounty": "TTT", "PenghuCounty": "PEN", "KinmenCounty": "KIN", "LienchiangCounty": "LIE", "InterCity": "THB"}

@@ -263,17 +263,21 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		})
 		//process_static(c, rc, db, city, "Schedule", func(raw []byte) {})
 		process_static(ctx, c, rc, db, city, "Station", func(raw []byte) {})
-		changetodbformat(ctx, db, subRoutemap)
+		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
-		//saveschedule(db, city)
-		savestatictodb(ctx, db, subRoutemap)
+		saveschedule(db, city)
+		savestatictodb(ctx, db, &subRoutemap)
+		_, err = db.Exec(ctx, "truncate raw_bus_route;")
+		if err != nil {
+			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_raw_error error=%v", city, err)
+		}
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_complete subroute_count=%d", city, len(subRoutemap))
 	}
 	log.Printf("[BUS] action=dailyRoute event=complete")
 }
-func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw map[string]*models.Subroute) {
+func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.Subroute) {
 	var row [][]interface{}
-	for _, sub := range raw {
+	for _, sub := range *raw {
 		for dir, d := range sub.Directions {
 			stops, err := json.Marshal(d.Stops)
 			if err != nil {
@@ -370,10 +374,10 @@ func saveschedule(db *pgxpool.Pool, city string) {
 
 }
 
-func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw map[string]*models.Subroute) {
+func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.Subroute) {
 	var row [][]interface{}
 	var mp [][]interface{}
-	for _, sub := range raw {
+	for _, sub := range *raw {
 		pb, err := proto.Marshal(sub)
 		if err != nil {
 			log.Printf("[BUS] action=savestatictodb event=marshal_error subroute=%s error=%v", sub.SubRouteUID, err)
@@ -585,7 +589,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		} else {
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=redis_success station_count=%d route_count=%d eat_count=%d posit_count=%d", city, len(stations), len(routes), len(eat), len(posit))
 		}
-		savebushistory(ctx, db, eat, posit)
+		//savebushistory(ctx, db, eat, posit)
 	}
 	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }
