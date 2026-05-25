@@ -19,9 +19,9 @@ import (
 
 var cities = []string{
 	"Taipei", "NewTaipei", "Taoyuan", "Taichung", "Tainan", "Kaohsiung",
-	"Keelung", "Hsinchu", "HsinchuCounty", "MiaoliCounty", "ChanghuaCounty",
+	"InterCity", "Hsinchu", "HsinchuCounty", "MiaoliCounty", "ChanghuaCounty",
 	"NantouCounty", "YunlinCounty", "ChiayiCounty", "Chiayi", "PingtungCounty",
-	"YilanCounty", "HualienCounty", "TaitungCounty", "PenghuCounty", "KinmenCounty", "LienchiangCounty", "InterCity",
+	"YilanCounty", "HualienCounty", "TaitungCounty", "PenghuCounty", "KinmenCounty", "LienchiangCounty", "Keelung",
 }
 
 type raw_Bus_Route struct {
@@ -59,13 +59,61 @@ type raw_Stopofroute struct {
 		LocationCityCode string `json:"LocationCityCode"`
 	} `json:"Stops"`
 }
-
+type raw_Bus_DailyTimetable struct {
+	SubRouteUID string `json:"SubRouteUID"`
+	Direction   uint8  `json:"Direction"`
+	BusDate     string `json:"BusDate"`
+	Timetables  []struct {
+		TripID     string `json:"TripID"`
+		IsLowFloor bool   `json:"IsLowFloor"`
+		StopTimes  []struct {
+			StopSequence  int    `json:"StopSequence"`
+			ArrivalTime   string `json:"ArrivalTime"`
+			DepartureTime string `json:"DepartureTime"`
+		} `json:"StopTimes"`
+	} `json:"Timetables"`
+}
 type raw_Bus_Schedule struct {
-	SubRouteUID string          `json:"SubRouteUID"`
-	RouteUID    string          `json:"RouteUID"`
-	Direction   uint8           `json:"Direction"`
-	Frequencys  json.RawMessage `json:"Frequencys,omitempty"`
-	Timetables  json.RawMessage `json:"Timetables,omitempty"`
+	SubRouteUID string `json:"SubRouteUID"`
+	RouteUID    string `json:"RouteUID"`
+	Direction   uint8  `json:"Direction"`
+	Timetables  []struct {
+		TripID     string `json:"TripID"`
+		IsLowFloor bool   `json:"IsLowFloor"`
+		ServiceDay struct {
+			Sunday    uint8 `json:"Sunday"`
+			Monday    uint8 `json:"Monday"`
+			Tuesday   uint8 `json:"Tuesday"`
+			Wednesday uint8 `json:"Wednesday"`
+			Thursday  uint8 `json:"Thursday"`
+			Friday    uint8 `json:"Friday"`
+			Saturday  uint8 `json:"Saturday"`
+		} `json:"ServiceDay"`
+		StopTimes []struct {
+			StopSequence int    `json:"StopSequence"`
+			StopUID      string `json:"StopUID"`
+			StopName     struct {
+				Zhtw string `json:"Zh_tw"`
+			} `json:"StopName"`
+			ArrivalTime   string `json:"ArrivalTime"`
+			DepartureTime string `json:"DepartureTime"`
+		} `json:"StopTimes"`
+	} `json:"Timetables"`
+	Frequencys []struct {
+		StartTime      string `json:"StartTime"`
+		EndTime        string `json:"EndTime"`
+		MinHeadwayMins uint8  `json:"MinHeadwayMins"`
+		MaxHeadwayMins uint8  `json:"MaxHeadwayMins"`
+		ServiceDay     struct {
+			Sunday    uint8 `json:"Sunday"`
+			Monday    uint8 `json:"Monday"`
+			Tuesday   uint8 `json:"Tuesday"`
+			Wednesday uint8 `json:"Wednesday"`
+			Thursday  uint8 `json:"Thursday"`
+			Friday    uint8 `json:"Friday"`
+			Saturday  uint8 `json:"Saturday"`
+		} `json:"ServiceDay"`
+	} `json:"Frequencys"`
 }
 
 type raw_Bus_Esimated struct {
@@ -74,7 +122,7 @@ type raw_Bus_Esimated struct {
 	SubRouteUID   string `json:"SubRouteUID"`
 	Direction     uint8  `json:"Direction"`
 	EstimatedTime int32  `json:"EstimatedTime"`
-	NextBusTime   int32  `json:"NextBusTime"`
+	NextBusTime   string `json:"NextBusTime"`
 	StopStatus    uint8  `json:"StopStatus"`
 	SrcUpdateTime string `json:"SrcUpdateTime"`
 }
@@ -101,6 +149,12 @@ type Bus_stationmap struct {
 	Direction    uint8
 	StopUID      string
 	StopSequence uint8
+}
+
+type bus_dailytable struct {
+	City        string                              `json:"city"`
+	SubRouteUID string                              `json:"sub_route_uid"`
+	Directions  map[string][]raw_Bus_DailyTimetable `json:"directions"`
 }
 
 /*
@@ -135,38 +189,6 @@ type raw_Bus_Station struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
-}
-
-type bus_schedule_freq struct {
-	StartTime      string `json:"StartTime"`
-	EndTime        string `json:"EndTime"`
-	MinHeadwayMins int    `json:"MinHeadwayMins"`
-	MaxHeadwayMins int    `json:"MaxHeadwayMins"`
-	ServiceDay     struct {
-		Sunday    bool `json:"Sunday"`
-		Monday    bool `json:"Monday"`
-		Tuesday   bool `json:"Tuesday"`
-		Wednesday bool `json:"Wednesday"`
-		Thursday  bool `json:"Thursday"`
-		Friday    bool `json:"Friday"`
-		Saturday  bool `json:"Saturday"`
-	} `json:"ServiceDay"`
-}
-
-type bus_schedule_tb struct {
-	ServiceDay struct {
-		Sunday    bool `json:"Sunday"`
-		Monday    bool `json:"Monday"`
-		Tuesday   bool `json:"Tuesday"`
-		Wednesday bool `json:"Wednesday"`
-		Thursday  bool `json:"Thursday"`
-		Friday    bool `json:"Friday"`
-		Saturday  bool `json:"Saturday"`
-	} `json:"ServiceDay"`
-	StopTimes []struct {
-		StopSequence  int    `json:"StopSequence"`
-		DepartureTime string `json:"DepartureTime"`
-	} `json:"StopTimes"`
 }
 
 func bus_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
@@ -208,6 +230,9 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 				if dest == "" {
 					dest = r.DestinationStopNameZh
+				}
+				if sub.Direction == 1 {
+					dep, dest = dest, dep
 				}
 				subRoutemap[uid].Directions[int32(dir)] = &models.Direction{
 					DepartureStopName:   dep,
@@ -261,12 +286,50 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})
-		//process_static(c, rc, db, city, "Schedule", func(raw []byte) {})
+		process_static(ctx, c, rc, db, city, "Schedule", func(raw []byte) {
+			log.Println(raw)
+			var r raw_Bus_Schedule
+			err := json.Unmarshal(raw, &r)
+			if err != nil {
+				log.Printf("[BUS] action=dailyRoute city=%s api=Schedule event=unmarshal_error error=%v", city, err)
+			}
+			log.Printf("%s %s", r.RouteUID, r.SubRouteUID)
+			uid, dir := makethatsame(city, r.SubRouteUID, r.Direction)
+			if sr, ok := subRoutemap[uid]; ok {
+				if d, ok := sr.Directions[int32(dir)]; ok {
+					for _, t := range r.Timetables {
+						m := mask2(t.ServiceDay.Monday, t.ServiceDay.Tuesday, t.ServiceDay.Wednesday, t.ServiceDay.Thursday, t.ServiceDay.Friday, t.ServiceDay.Saturday, t.ServiceDay.Sunday)
+						for _, temp := range t.StopTimes {
+							d.Schedules = append(d.Schedules, &models.Bus_Schedule{
+								Type:                        true,
+								Tripid:                      t.TripID,
+								Islowfloor:                  t.IsLowFloor,
+								MinHeadwayMinsArrivalTime:   temp.ArrivalTime,
+								MaxHeadwayMinsDepartureTime: temp.DepartureTime,
+								ServiceDay:                  int32(m),
+							})
+						}
+					}
+					for _, t := range r.Frequencys {
+						m := mask2(t.ServiceDay.Monday, t.ServiceDay.Tuesday, t.ServiceDay.Wednesday, t.ServiceDay.Thursday, t.ServiceDay.Friday, t.ServiceDay.Saturday, t.ServiceDay.Sunday)
+						d.Schedules = append(d.Schedules, &models.Bus_Schedule{
+							Type:                        false,
+							Start_Time:                  t.StartTime,
+							End_Time:                    t.EndTime,
+							MinHeadwayMinsArrivalTime:   fmt.Sprintf("%d", t.MinHeadwayMins),
+							MaxHeadwayMinsDepartureTime: fmt.Sprintf("%d", t.MaxHeadwayMins),
+							ServiceDay:                  int32(m),
+						})
+					}
+				}
+			}
+		})
 		process_static(ctx, c, rc, db, city, "Station", func(raw []byte) {})
 		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
-		saveschedule(db, city)
+		saveschedule(ctx, db, city)
 		savestatictodb(ctx, db, &subRoutemap)
+		cacheBusDailyTable(rc, city, &subRoutemap)
 		_, err = db.Exec(ctx, "truncate raw_bus_route;")
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_raw_error error=%v", city, err)
@@ -291,6 +354,8 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 				sub.SubRouteName,
 				d.Geometry,
 				stops,
+				d.DepartureStopName,
+				d.DestinationStopName,
 			})
 		}
 	}
@@ -310,7 +375,9 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 			name1 text,
 			name2 text,
 			geom text,
-    		rawstop jsonb
+    		rawstop jsonb,
+			depart text,
+			destin text
                           ) ON COMMIT DROP
 		    `
 	c2 := `
@@ -321,7 +388,9 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 				route_name,
 				sub_route_name,
 				geometry,
-				stops
+				stops,
+				depart,
+				destin
 			)
 			SELECT uid, rid, d, name1, name2,geom,
 				   ARRAY(
@@ -333,15 +402,15 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 								  (s ->> 'PositionLat')::float
 							  )::stop
 					   FROM jsonb_array_elements(rawstop) AS s
-				   )
+				   ),depart,destin
 			FROM temp_bus 
 			ON CONFLICT (sub_route_uid, direction) 
-			DO UPDATE SET geometry = EXCLUDED.geometry,stops = EXCLUDED.stops;
+			DO UPDATE SET geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin;
 			`
 	if _, err := b.Exec(ctx, c1); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=create_temp_error error=%v", err)
 	}
-	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "geom", "rawstop"}, pgx.CopyFromRows(row)); err != nil {
+	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "geom", "rawstop", "depart", "destin"}, pgx.CopyFromRows(row)); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=copyfrom_error error=%v row_count=%d", err, len(row))
 	}
 	if _, err := b.Exec(ctx, c2); err != nil {
@@ -370,8 +439,83 @@ func savestations(ctx context.Context, db *pgxpool.Pool, city string) {
 		log.Printf("[BUS] action=savestations city=%s event=complete", city)
 	}
 }
-func saveschedule(db *pgxpool.Pool, city string) {
-
+func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
+	rows, err := db.Query(ctx, `SELECT content FROM raw_bus_route WHERE type = 'Schedule' AND destin = $1`, city)
+	if err != nil {
+		log.Printf("[BUS] action=saveschedule city=%s event=query_error error=%v", city, err)
+		return
+	}
+	defer rows.Close()
+	var row [][]interface{}
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			continue
+		}
+		var temp raw_Bus_Schedule
+		if err := json.Unmarshal(raw, &temp); err != nil {
+			log.Printf("[BUS] action=saveschedule city=%s event=unmarshal_error error=%v", city, err)
+			continue
+		}
+		uid, dir := makethatsame(city, temp.SubRouteUID, temp.Direction)
+		for _, t := range temp.Frequencys {
+			row = append(row, []interface{}{
+				uid, int16(dir), true, "", false, int16(-1), fmt.Sprintf("%d", t.MinHeadwayMins), fmt.Sprintf("%d", t.MaxHeadwayMins), t.StartTime, t.EndTime, int16(mask2(t.ServiceDay.Monday, t.ServiceDay.Tuesday, t.ServiceDay.Wednesday, t.ServiceDay.Thursday, t.ServiceDay.Friday, t.ServiceDay.Saturday, t.ServiceDay.Sunday)),
+			})
+		}
+		for _, t := range temp.Timetables {
+			for _, st := range t.StopTimes {
+				row = append(row, []interface{}{
+					uid, dir, false, t.TripID, t.IsLowFloor, st.StopSequence, st.StopUID, st.StopName.Zhtw, st.ArrivalTime, st.ArrivalTime, mask2(t.ServiceDay.Monday, t.ServiceDay.Tuesday, t.ServiceDay.Wednesday, t.ServiceDay.Thursday, t.ServiceDay.Friday, t.ServiceDay.Saturday, t.ServiceDay.Sunday),
+				})
+			}
+		}
+	}
+	if len(row) == 0 {
+		log.Printf("[BUS] action=saveschedule city=%s event=skip reason=no_rows", city)
+		return
+	}
+	b, err := db.Begin(ctx)
+	if err != nil {
+		log.Printf("[BUS] action=saveschedule city=%s event=begin_error error=%v", city, err)
+		return
+	}
+	c1 := `CREATE TEMP TABLE temp_bus (
+					uid text,
+					dir smallint,
+					type bool,
+					id text,
+					floor bool,
+					seq smallint,
+					stopuid text,
+					stopname text,
+					arrival text,
+					departure text,
+					sdays smallint,
+				) ON COMMIT DROP`
+	c2 := `INSERT INTO bus_schedule (sub_route_uid, direction, type, tripid,islowfloor, stopsequence,"stop_uid/MinHeadwayMins","stop_name/MaxHeadwayMins","arrival_time/StartTime","departure_time/EndTime", service_day)
+				SELECT uid, dir, type, id, floor, seq, stopuid,stopname,arrival::time, departure::time,sdays FROM temp_bus`
+	/*ON CONFLICT (sub_route_uid, direction, type, service_day,tripid,"stop_uid/MinHeadwayMins")
+	DO UPDATE SET
+		islowfloor = EXCLUDED.islowfloor,
+		stopsequence = EXCLUDED.stopsequence,
+		"stop_name/MaxHeadwayMins" = EXCLUDED."stop_name/MaxHeadwayMins",
+		"arrival_time/StartTime" = EXCLUDED."arrival_time/StartTime",
+		"departure_time/EndTime" = EXCLUDED."departure_time/EndTime",*/
+	defer b.Rollback(ctx)
+	b.Exec(ctx, c1)
+	if _, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus"},
+		[]string{"uid", "dir", "type", "id", "floor", "seq", "stopuid", "stopname", "arrival", "departure", "sdays"},
+		pgx.CopyFromRows(row)); err != nil {
+		log.Printf("[BUS] action=saveschedule city=%s event=copyfrom_error error=%v", city, err)
+		return
+	}
+	if _, err = b.Exec(ctx, c2); err != nil {
+		log.Printf("[BUS] action=saveschedule city=%s event=insert_error error=%v", city, err)
+		return
+	}
+	b.Commit(ctx)
+	log.Printf("[BUS] action=saveschedule city=%s event=complete row_count=%d", city, len(row))
 }
 
 func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.Subroute) {
@@ -384,7 +528,7 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 			continue
 		}
 		row = append(row, []interface{}{
-			sub.SubRouteUID, sub.RouteUID, pb,
+			sub.SubRouteUID, sub.RouteUID, pb, sub.DepartureStopName, sub.DestinationStopName,
 		})
 		for dir, d := range sub.Directions {
 			for _, stop := range d.Stops {
@@ -405,19 +549,21 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 		return
 	}
 	if len(row) > 0 {
-		if _, err := b.Exec(ctx, `CREATE TEMP TABLE temp_pb (uid text,rid text,pb bytea) ON COMMIT DROP`); err != nil {
+		if _, err := b.Exec(ctx, `CREATE TEMP TABLE temp_pb (uid text,rid text,pb bytea,depart text,destin text) ON COMMIT DROP`); err != nil {
 			log.Printf("[BUS] action=savestatictodb event=create_temp_pb_error error=%v", err)
 		}
-		if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_pb"}, []string{"uid", "rid", "pb"}, pgx.CopyFromRows(row)); err != nil {
+		if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_pb"}, []string{"uid", "rid", "pb", "depart", "destin"}, pgx.CopyFromRows(row)); err != nil {
 			log.Printf("[BUS] action=savestatictodb event=copyfrom_pb_error error=%v row_count=%d", err, len(row))
 		}
 		if _, err := b.Exec(ctx, `INSERT INTO bus_static (
                         sub_route_uid,
                         route_uid,
-                        pb
+                        pb,
+						depart,
+						destin
 					)
-					SELECT uid,rid,pb FROM temp_pb
-					ON CONFLICT (sub_route_uid) DO UPDATE SET pb = excluded.pb,updated_at = NOW()
+					SELECT uid,rid,pb,depart,destin FROM temp_pb
+					ON CONFLICT (sub_route_uid) DO UPDATE SET pb = excluded.pb,updated_at = NOW(),depart = excluded.depart,destin = excluded.destin
 					`); err != nil {
 			log.Printf("[BUS] action=savestatictodb event=insert_pb_error error=%v", err)
 		} else {
@@ -453,6 +599,30 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 	} else {
 		log.Printf("[BUS] action=savestatictodb event=complete pb_rows=%d map_rows=%d", len(row), len(mp))
 	}
+}
+
+func cacheBusDailyTable(rc *redis.Client, city string, raw *map[string]*models.Subroute) {
+	pipe := rc.Pipeline()
+	count := 0
+	for uid, sub := range *raw {
+		data, err := proto.Marshal(sub)
+		if err != nil {
+			log.Printf("[BUS] action=cacheBusDailyTable city=%s event=marshal_error sub_route_uid=%s error=%v", city, uid, err)
+			continue
+		}
+		pipe.Set(fmt.Sprintf("bus_dailytable:%s", uid), data, 23*time.Hour)
+		pipe.Set(fmt.Sprintf("bus_dailytable:%s:%s", city, uid), data, 23*time.Hour)
+		count++
+	}
+	if count == 0 {
+		log.Printf("[BUS] action=cacheBusDailyTable city=%s event=skip reason=no_rows", city)
+		return
+	}
+	if _, err := pipe.Exec(); err != nil {
+		log.Printf("[BUS] action=cacheBusDailyTable city=%s event=redis_error error=%v row_count=%d", city, err, count)
+		return
+	}
+	log.Printf("[BUS] action=cacheBusDailyTable city=%s event=complete row_count=%d", city, count)
 }
 
 func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
@@ -553,7 +723,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 				RouteName:     b.SubRouteName,
 				Direction:     int32(b.Direction),
 				Estimate:      int32(est),
-				NextBusTime:   string(eta.NextBusTime),
+				NextBusTime:   eta.NextBusTime,
 				StopStatus:    int32(status),
 				SrcUpdateTime: stime,
 				Buses:         busmap[b.SubRouteUID],

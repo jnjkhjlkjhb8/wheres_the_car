@@ -372,7 +372,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 			}
 			uid, dir := makethatsame(city, t.SubRouteUID, t.Direction)
 			raw_rows = append(raw_rows, []interface{}{
-				uid, t.RouteUID, "", "", fmt.Sprintf("%d", dir), city, api, raw,
+				uid, t.RouteUID, fmt.Sprintf("%d", dir), "", "", city, api, raw,
 			})
 		case "Station":
 			var t raw_Bus_Station
@@ -399,6 +399,16 @@ func mask(mon, tues, wed, thur, fri, satur, sun bool) uint8 {
 	days := []bool{mon, tues, wed, thur, fri, satur, sun}
 	for i, v := range days {
 		if v {
+			res |= 1 << i
+		}
+	}
+	return res
+}
+func mask2(mon, tues, wed, thur, fri, satur, sun uint8) uint8 {
+	var res uint8
+	days := []uint8{mon, tues, wed, thur, fri, satur, sun}
+	for i, v := range days {
+		if v == 1 {
 			res |= 1 << i
 		}
 	}

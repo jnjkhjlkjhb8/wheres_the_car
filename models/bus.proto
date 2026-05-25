@@ -18,6 +18,8 @@ message subroute{
   string RouteName = 2;
   string SubRouteUID = 3;
   string SubRouteName = 4;
+  string DepartureStopName = 5;
+  string DestinationStopName = 6;
   map<int32,Direction> Directions = 7;
 }
 
@@ -26,6 +28,7 @@ message Direction{
   string DestinationStopName = 2;
   string Geometry = 3;
   repeated stop Stops = 4;
+  repeated Bus_Schedule Schedules = 5;
 }
 
 message stop{
@@ -95,4 +98,18 @@ message Bus_position{
   int32 DutyStatus = 6;
   int32 BusStatus = 7;
   string gps_time = 8;
+}
+message Bus_schedule {
+  repeated Bus_Schedule schedules = 1;
+}
+message Bus_Schedule {
+  bool type = 1;
+  string tripid = 2;
+  bool islowfloor = 3;
+  string start_Time = 4;
+  string end_Time = 5;
+  string MinHeadwayMins_arrival_time = 6;
+  string MaxHeadwayMins_departure_time = 7;
+  int32 service_day = 8;
+  bool cut = 9;
 }
