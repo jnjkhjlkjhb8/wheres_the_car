@@ -55,17 +55,26 @@ func main() {
 		log.Println("[crontab] action=daily event=end")
 	})
 	_, _ = r.AddFunc("@every 2m", func() {
+		if sleepingwhiledailyupdate() {
+			return
+		}
 		log.Println("[crontab] action=tra event=start")
 		traEta(c, rc)
 		log.Println("[crontab] action=tra event=end")
 	})
 	_, _ = r.AddFunc("@every 30s", func() {
+		if sleepingwhiledailyupdate() {
+			return
+		}
 		log.Println("[crontab] action=bus&bike event=start")
 		bikeEta(c, rc)
 		BusEta(context.Background(), c, rc, db)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
 	_, _ = r.AddFunc("@every 10s", func() {
+		if sleepingwhiledailyupdate() {
+			return
+		}
 		log.Println("[crontab] action=bike event=start")
 		mrtEta(c, rc)
 		log.Println("[crontab] action=bike event=end")
@@ -78,23 +87,25 @@ func main() {
 	log.Println("在關了，沒看到嗎？")
 }
 
-func callApi(client *resty.Client, rc *redis.Client, url string, name string) (json.Decoder, bool, error, func()) {
+func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*json.Decoder, bool, error, func()) {
 	since, _ := rc.Get("LastTimeGet_" + name).Result()
-	resp, err := client.SetHeader("If-Modified-Since", since).R().Get(url)
+	resp, err := client.R().
+		SetHeader("If-Modified-Since", since).
+		Get(url)
 	if err != nil {
-		return json.Decoder{}, false, err, nil
+		return &json.Decoder{}, false, err, nil
 	}
 	if resp.StatusCode() == 304 {
 		err := resp.RawResponse.Body.Close()
 		if err != nil {
-			return json.Decoder{}, false, err, nil
+			return &json.Decoder{}, false, err, nil
 		}
 		log.Printf("[RUN] action=no update=%s", name)
-		return json.Decoder{}, false, nil, nil
+		return &json.Decoder{}, false, nil, nil
 	}
 	rc.Set("LastTimeGet_"+name, resp.Header().Get("Last-Modified"), 0)
 	decorder := json.NewDecoder(resp.RawResponse.Body)
-	return *decorder, true, nil, func() {
+	return decorder, true, nil, func() {
 		err := resp.RawResponse.Body.Close()
 		if err != nil {
 			log.Printf("[RUN] action=fail-close-response error=%v", err)
@@ -389,4 +400,9 @@ func mask2(mon, tues, wed, thur, fri, satur, sun uint8) uint8 {
 		}
 	}
 	return res
+}
+
+func sleepingwhiledailyupdate() bool {
+	now := time.Now()
+	return now.Hour() == 3 && now.Minute() < 30
 }

@@ -23,6 +23,14 @@ var cities = []string{
 	"NantouCounty", "YunlinCounty", "ChiayiCounty", "Chiayi", "PingtungCounty",
 	"YilanCounty", "HualienCounty", "TaitungCounty", "PenghuCounty", "KinmenCounty", "LienchiangCounty", "Keelung",
 }
+var citymap = map[string]string{
+	"Taipei": "TPE", "NewTaipei": "NWT", "Taoyuan": "TAO", "Taichung": "TXG",
+	"Tainan": "TNN", "Kaohsiung": "KHH", "InterCity": "THB", "Keelung": "KEE",
+	"Hsinchu": "HSZ", "HsinchuCounty": "HSQ", "Miaoli": "MIA", "Changhua": "CHA",
+	"Nantou": "NAN", "Chiayi": "CYI", "ChiayiCounty": "CYQ", "Yunlin": "YUN",
+	"Pingtung": "PIF", "Yilan": "ILA", "Hualien": "HUA", "Taitung": "TTT",
+	"Penghu": "PEN", "Kinmen": "KIN", "Lienchiang": "LIE",
+}
 
 type rawBusRoute struct {
 	RouteUID  string `json:"RouteUID"`
@@ -623,7 +631,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			continue
 		}
 		log.Printf("[BUS_ETA] action=Bus_eta city=%s event=city_start", city)
-		mp, err := busstaticmp(ctx, db, city)
+		mp, err := busstaticmp(ctx, db, citymap[city])
 		if err != nil || len(mp) <= 0 {
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=skip_empty reason=no_stations", city)
 			continue

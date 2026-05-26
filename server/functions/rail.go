@@ -337,8 +337,10 @@ func traEta(client *resty.Client, rc *redis.Client) {
 	}
 	dec, comp, err, flipopen = callApi(client, rc, "/v2/Rail/TRA/LiveBoard", "tra_liveboard")
 	func() {
-		defer flipopen()
-		if err != nil && !comp {
+		if flipopen != nil {
+			defer flipopen()
+		}
+		if err != nil || !comp {
 			return
 		}
 		if _, err := dec.Token(); err != nil {
