@@ -1,5 +1,5 @@
 FROM golang:1.26.3-alpine3.23 AS builder
-RUN sudo apk add --no-cache protobuf-dev protoc git
+RUN apk add --no-cache protobuf-dev protoc git
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest

@@ -6,28 +6,29 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/robfig/cron/v3"
 )
 
-func get_port() string {
-	port := ":8080"
-	if val, ok := os.LookupEnv("FUNCTIONS_CUSTOMHANDLER_PORT"); ok {
-		port = ":" + val
-	}
-	return port
-}
-
 func main() {
-	r := gin.Default()
+	r := cron.New(cron.WithSeconds())
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
+	defer func(rc *redis.Client) {
+		err := rc.Close()
+		if err != nil {
+			log.Printf("[REDIS] action=close event=failed error=%v", err)
+		}
+	}(rc)
+	defer db.Close()
 	c.SetAuthToken(getToken(rc, c)).
 		SetBaseURL("https://tdx.transportdata.tw/api/basic").
 		SetHeader("Content-Type", "application/json").
@@ -44,64 +45,37 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	port := get_port()
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "pong",
-			"status":  "healthy",
-		})
-	})
-	r.POST("/daily", func(ctx *gin.Context) {
-		log.Println("[AZURE] action=daily event=start")
+	r.AddFunc("0 0 3 * * *", func() {
+		ctx := context.Background()
+		log.Println("[crontab] action=daily event=start")
 		bus_static(ctx, c, rc, db)
 		bike_static(ctx, c, rc, db)
 		mrt_static(ctx, c, rc, db)
 		rail_static(ctx, c, rc, db)
-		log.Println("[AZURE] action=daily event=end")
-		ctx.JSON(200, gin.H{
-			"message": "daily",
-			"status":  "done",
-		})
+		log.Println("[crontab] action=daily event=end")
 	})
-	r.POST("/tra", func(ctx *gin.Context) {
-		log.Println("[AZURE] action=tra event=start")
+	r.AddFunc("@every 2m", func() {
+		log.Println("[crontab] action=tra event=start")
 		tra_eta(c, rc)
-		log.Println("[AZURE] action=tra event=end")
-		ctx.JSON(200, gin.H{
-			"message": "tra",
-			"status":  "done",
-		})
+		log.Println("[crontab] action=tra event=end")
 	})
-	r.POST("/bike", func(ctx *gin.Context) {
-		log.Println("[AZURE] action=bike event=start")
+	r.AddFunc("@every 30s", func() {
+		log.Println("[crontab] action=bus&bike event=start")
 		bike_eta(c, rc)
-		log.Println("[AZURE] action=bike event=end")
-		ctx.JSON(200, gin.H{
-			"message": "bike",
-			"status":  "done",
-		})
-	})
-	r.POST("/bus", func(ctx *gin.Context) {
-		log.Println("[AZURE] action=bus event=start")
 		Bus_eta(context.Background(), c, rc, db)
-		mrt_eta(c, rc)
-		ctx.JSON(200, gin.H{
-			"status": "ok",
-		})
-		log.Println("[AZURE] action=bus event=end")
+		log.Println("[crontab] action=bus&bike event=end")
 	})
-	err := r.Run(port)
-	if err != nil {
-		log.Printf("[RUN] action=fail-listen-port error=%v", err)
-		panic(err)
-	}
-	defer func(rc *redis.Client) {
-		err := rc.Close()
-		if err != nil {
-
-		}
-	}(rc)
-	defer db.Close()
+	r.AddFunc("@every 10s", func() {
+		log.Println("[crontab] action=bike event=start")
+		mrt_eta(c, rc)
+		log.Println("[crontab] action=bike event=end")
+	})
+	r.Start()
+	defer r.Stop()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
+	log.Println("在關了，沒看到嗎？")
 }
 
 // basic func

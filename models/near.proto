@@ -1,0 +1,22 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+
+service Near_Station{
+  rpc near(stream ask_near) returns (stream NearStation) {}
+}
+
+message ask_near{
+  double PositionLon = 1;
+  double PositionLat = 2;
+  int32 Radius = 3;
+}
+
+message NearStation{
+  string StationID = 1;
+  string StationName = 2;
+  string city = 3;
+  double PositionLon = 4;
+  double PositionLat = 5;
+  int32 type = 6;
+}

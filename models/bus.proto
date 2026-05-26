@@ -1,10 +1,10 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
-service request_route{
+service BusRoute{
   rpc static(requestroute) returns (subroute) {}
   rpc eta(requestroute) returns (stream Bus_RouteArrival) {}
 }
-service request_station{
+service BusStation{
   rpc eta(requeststation) returns (stream Bus_StationArrival) {}
 }
 message requestroute {
@@ -111,5 +111,21 @@ message Bus_Schedule {
   string MinHeadwayMins_arrival_time = 6;
   string MaxHeadwayMins_departure_time = 7;
   int32 service_day = 8;
-  bool cut = 9;
+}
+message Bus_DailyTimetables{
+  string SubRouteUID = 1;
+  map<int32,temp> direction = 3;
+}
+message temp{
+  repeated Bus_DailyTimetable DailyTimetables = 1;
+}
+message Bus_DailyTimetable{
+  string TripID = 1;
+  bool IsLowFloor = 2;
+  repeated temp_StopTimes StopTimes = 3;
+}
+message temp_StopTimes{
+  int32 StopSequence = 1;
+  string ArrivalTime = 2;
+  string DepartureTime = 3;
 }

@@ -4,96 +4,49 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/go-redis/redis"
-	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pb "github.com/jnjkhjlkjhb8/bus/models"
-	"google.golang.org/grpc"
 )
 
-type server struct {
-	db    *pgxpool.Pool
-	redis *redis.Client
-	tdx   *resty.Client
+type Bus_RouteServer struct {
+	pb.UnimplementedBusRouteServer
+	mu sync.Mutex
+}
+type Bus_StationServer struct {
+	pb.UnimplementedBusStationServer
+	mu sync.Mutex
+}
+type Bike_request struct {
+	pb.UnimplementedRequestBikeServer
+	mu sync.Mutex
+}
+type Mrt_request struct {
+	pb.UnimplementedRequestMrtServer
+	mu sync.Mutex
+}
+type Thsr_request struct {
+	pb.UnimplementedRequestThsrServer
+	mu sync.Mutex
+}
+type Tra_StationServer struct {
+	pb.UnimplementedRquestStationServer
+	mu sync.Mutex
+}
+type Tra_RoutesServer struct {
+	pb.UnimplementedRequestRoutesServer
+	mu sync.Mutex
+}
+type Near_StationServer struct {
+	pb.UnimplementedNear_StationServer
+	mu sync.Mutex
 }
 
-type bus_returnroute interface {
-	BusRouteStatic(context.Context, *pb.Requestroute) (*pb.Subroute, error)
-	BusRouteEta(*pb.Requestroute, requestRouteEtaServer) error
-}
-
-type bus_returnstation interface {
-	BusStationEta(*pb.Requeststation, requestStationEtaServer) error
-}
-
-type bike_return interface {
-	BikeStatic(context.Context, *pb.BikeRequest) (*pb.BikeStatic, error)
-	BikeEta(*pb.BikeRequest, requestBikeEtaServer) error
-}
-
-type mrt_return interface {
-	MrtEta(*pb.Requestmrt, requestMrtEtaServer) error
-}
-
-type thsr_return interface {
-	ThsrFare(context.Context, *pb.AskStatic) (*pb.ThsaFare, error)
-	ThsrTimetable(context.Context, *pb.AskStatic) (*pb.ThsaTimetable, error)
-}
-
-type tra_returnstation interface {
-	TraStationLiveBoard(*pb.AskStaiton, rquestStationLiveBoardServer) error
-	TraStationTimetable(context.Context, *pb.AskStaiton) (*pb.TraTimetable, error)
-}
-
-type tra_return interface {
-	TraRouteTimetable(context.Context, *pb.AskRoute) (*pb.TraTimetable, error)
-	TraRouteFare(context.Context, *pb.AskStaiton) (*pb.TraFareItem, error)
-	TraRouteDelay(*pb.AskRoute, requestRoutesDelayServer) error
-}
-
-type bus_requestroute interface {
-	Send(*pb.Bus_RouteArrival) error
-	grpc.ServerStream
-}
-
-type bus_requestation interface {
-	Send(*pb.Bus_StationArrival) error
-	grpc.ServerStream
-}
-
-type bike_request interface {
-	Send(*pb.BikeEta) error
-	grpc.ServerStream
-}
-
-type mrt_request interface {
-	Send(*pb.MrtLive) error
-	grpc.ServerStream
-}
-
-type tra_requestation interface {
-	Send(*pb.Tra_LiveBoards) error
-	grpc.ServerStream
-}
-
-type tra_requestdelay interface {
-	Send(*pb.TraDelay) error
-	grpc.ServerStream
-}
-
-func run() error {
-	redisClient := connectredis()
-	dbPool := connectdb()
-
-	srv := grpc.NewServer()
-	pb.RegisterBusServer(srv, &server{
-		db:    dbPool,
-		redis: redisClient,
-		tdx:   nil,
-	})
-
-	return srv.ListenAndServe()
+func main() {
+	rc := connectredis()
+	db := connectdb()
 }
 
 func makethatsame(city string, subRouteUID string, Direction uint8) (string, uint8) {
