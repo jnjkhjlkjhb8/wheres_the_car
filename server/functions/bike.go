@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type bike_station struct {
+type bikeStation struct {
 	StationUID  string `json:"StationUID"`
 	StationID   string `json:"StationID"`
 	StationName struct {
@@ -32,7 +32,7 @@ type bike_station struct {
 	BikesCapacity uint8 `json:"BikesCapacity"`
 	ServiceType   uint8 `json:"ServiceType"`
 }
-type bike_availability struct {
+type bikeAvailability struct {
 	StationUID               string `json:"StationUID"`
 	StationID                string `json:"StationID"`
 	ServiceStatus            uint8  `json:"ServiceStatus"`
@@ -44,19 +44,19 @@ type bike_availability struct {
 	} `json:"AvailableRentBikesDetail"`
 }
 
-func bike_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func bikeStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BIKE] action=bike_static event=start")
-	getbike_station(ctx, client, rc, db)
+	getbikeStation(ctx, client, rc, db)
 	log.Printf("[BIKE] action=bike_static event=complete")
 }
-func getbike_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getbikeStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BIKE] action=getbike_station event=start")
 	for _, city := range cities {
 		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" || city == "HualienCounty" {
 			continue
 		}
 		log.Printf("[BIKE] action=getbike_station city=%s event=city_start", city)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Station/City/%s", city), "bike_stations"+city)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Bike/Station/City/%s", city), "bike_stations"+city)
 		func() {
 			if flipopen != nil {
 				defer flipopen()
@@ -71,7 +71,7 @@ func getbike_station(ctx context.Context, client *resty.Client, rc *redis.Client
 			}
 			var row [][]interface{}
 			for dec.More() {
-				var temp bike_station
+				var temp bikeStation
 				if err := dec.Decode(&temp); err == nil {
 					g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
 					row = append(row, []interface{}{
@@ -132,14 +132,14 @@ func getbike_station(ctx context.Context, client *resty.Client, rc *redis.Client
 	}
 	log.Printf("[BIKE] action=getbike_station event=complete")
 }
-func bike_eta(client *resty.Client, rc *redis.Client) {
+func bikeEta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[BIKE_ETA] action=bike_eta event=start")
 	for _, city := range cities {
 		if city == "Keelung" || city == "HsinchuCounty" || city == "NantouCounty" || city == "YilanCounty" || city == "PenghuCounty" || city == "KinmenCounty" || city == "LienchiangCounty" || city == "InterCity" || city == "HualienCounty" {
 			continue
 		}
 		log.Printf("[BIKE_ETA] action=bike_eta city=%s event=city_start", city)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability"+city)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability"+city)
 		if err != nil || !comp {
 			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=api_error,error=%s", city, err)
 			continue
@@ -152,7 +152,7 @@ func bike_eta(client *resty.Client, rc *redis.Client) {
 			defer flipopen()
 			pipe := rc.Pipeline()
 			for dec.More() {
-				var temp bike_availability
+				var temp bikeAvailability
 				if err := dec.Decode(&temp); err == nil {
 					raw := &models.BikeEta{
 						StationUID:           temp.StationUID,

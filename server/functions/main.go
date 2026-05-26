@@ -45,29 +45,29 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	r.AddFunc("0 0 3 * * *", func() {
+	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
 		bus_static(ctx, c, rc, db)
-		bike_static(ctx, c, rc, db)
-		mrt_static(ctx, c, rc, db)
-		rail_static(ctx, c, rc, db)
+		bikeStatic(ctx, c, rc, db)
+		mrtStatic(ctx, c, rc, db)
+		railStatic(ctx, c, rc, db)
 		log.Println("[crontab] action=daily event=end")
 	})
-	r.AddFunc("@every 2m", func() {
+	_, _ = r.AddFunc("@every 2m", func() {
 		log.Println("[crontab] action=tra event=start")
-		tra_eta(c, rc)
+		traEta(c, rc)
 		log.Println("[crontab] action=tra event=end")
 	})
-	r.AddFunc("@every 30s", func() {
+	_, _ = r.AddFunc("@every 30s", func() {
 		log.Println("[crontab] action=bus&bike event=start")
-		bike_eta(c, rc)
+		bikeEta(c, rc)
 		Bus_eta(context.Background(), c, rc, db)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
-	r.AddFunc("@every 10s", func() {
+	_, _ = r.AddFunc("@every 10s", func() {
 		log.Println("[crontab] action=bike event=start")
-		mrt_eta(c, rc)
+		mrtEta(c, rc)
 		log.Println("[crontab] action=bike event=end")
 	})
 	r.Start()
@@ -78,8 +78,7 @@ func main() {
 	log.Println("在關了，沒看到嗎？")
 }
 
-// basic func
-func call_api(client *resty.Client, rc *redis.Client, url string, name string) (json.Decoder, bool, error, func()) {
+func callApi(client *resty.Client, rc *redis.Client, url string, name string) (json.Decoder, bool, error, func()) {
 	since, _ := rc.Get("LastTimeGet_" + name).Result()
 	resp, err := client.SetHeader("If-Modified-Since", since).R().Get(url)
 	if err != nil {
@@ -102,89 +101,92 @@ func call_api(client *resty.Client, rc *redis.Client, url string, name string) (
 		}
 	}
 }
-func savebushistory(ctx context.Context, db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
-	mp := make(map[string]raw_Bus_Position)
-	var rows [][]interface{}
-	for _, b := range posit {
-		mp[b.PlateNumb] = b
-	}
-	for _, b := range eat {
-		stime, err := time.Parse(time.RFC3339, b.SrcUpdateTime)
-		var gps interface{} = nil
-		var geom interface{} = nil
-		if err != nil {
-			stime = time.Now()
+
+/*
+	func savebushistory(ctx context.Context, db *pgxpool.Pool, eat []raw_Bus_Esimated, posit []raw_Bus_Position) {
+		mp := make(map[string]raw_Bus_Position)
+		var rows [][]interface{}
+		for _, b := range posit {
+			mp[b.PlateNumb] = b
 		}
-		if pos, ok := mp[b.PlateNumb]; ok {
-			t, err := time.Parse(time.RFC3339, pos.GPSTime)
+		for _, b := range eat {
+			stime, err := time.Parse(time.RFC3339, b.SrcUpdateTime)
+			var gps interface{} = nil
+			var geom interface{} = nil
 			if err != nil {
-				t = stime
+				stime = time.Now()
 			}
-			gps = t
-			geom = fmt.Sprintf("POINT(%.6f %.6f)", pos.BusPosition.PositionLon, pos.BusPosition.PositionLat)
-		}
-		rows = append(rows, []interface{}{
-			b.SubRouteUID,
-			b.Direction,
-			b.StopUID,
-			b.EstimatedTime,
-			b.StopStatus,
-			b.PlateNumb,
-			geom,
-			gps,
-			stime,
-		})
-	}
-	if len(rows) <= 0 {
-		return
-	}
-	b, err := db.Begin(ctx)
-	if err != nil {
-		log.Printf("[BUS] Begin tx error: %v", err)
-		return
-	}
-	_, err = b.Exec(ctx, "CREATE TEMP TABLE temp_bus_history (uid text, dir int2, suid text, est int4, sts int2,pl text, geom text,gps timestamptz,stime timestamptz) ON COMMIT DROP;")
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"uid", "dir", "suid", "est", "sts", "pl", "geom", "gps", "stime"}, pgx.CopyFromRows(rows))
-	if err != nil {
-		log.Printf("[BUS] action=savebushistory event=copyfrom_error error=%v row_count=%d", err, len(rows))
-		return
-	}
-	c1 := `INSERT INTO bus_eta_history (
-				sub_route_uid,
-		 		direction,
-				stop_uid,
-				estimate_time,
-				stop_status,
-				plate_numb,
-				bus_position,
-				gps_time,
-			    src_update_time
-			)
-		SELECT
-				uid,
-		 		dir,
-				suid,
-				est,
-				sts,
-				pl,
-				CASE WHEN geom IS NOT NULL THEN ST_GeomFromText(geom, 4326) END,
+			if pos, ok := mp[b.PlateNumb]; ok {
+				t, err := time.Parse(time.RFC3339, pos.GPSTime)
+				if err != nil {
+					t = stime
+				}
+				gps = t
+				geom = fmt.Sprintf("POINT(%.6f %.6f)", pos.BusPosition.PositionLon, pos.BusPosition.PositionLat)
+			}
+			rows = append(rows, []interface{}{
+				b.SubRouteUID,
+				b.Direction,
+				b.StopUID,
+				b.EstimatedTime,
+				b.StopStatus,
+				b.PlateNumb,
+				geom,
 				gps,
-			    stime
-		FROM temp_bus_history;`
-	_, err = b.Exec(ctx, c1)
-	if err != nil {
-		log.Printf("[BUS] action=savebushistory event=insert_error error=%v", err)
+				stime,
+			})
+		}
+		if len(rows) <= 0 {
+			return
+		}
+		b, err := db.Begin(ctx)
+		if err != nil {
+			log.Printf("[BUS] Begin tx error: %v", err)
+			return
+		}
+		_, err = b.Exec(ctx, "CREATE TEMP TABLE temp_bus_history (uid text, dir int2, suid text, est int4, sts int2,pl text, geom text,gps timestamptz,stime timestamptz) ON COMMIT DROP;")
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus_history"}, []string{"uid", "dir", "suid", "est", "sts", "pl", "geom", "gps", "stime"}, pgx.CopyFromRows(rows))
+		if err != nil {
+			log.Printf("[BUS] action=savebushistory event=copyfrom_error error=%v row_count=%d", err, len(rows))
+			return
+		}
+		c1 := `INSERT INTO bus_eta_history (
+					sub_route_uid,
+			 		direction,
+					stop_uid,
+					estimate_time,
+					stop_status,
+					plate_numb,
+					bus_position,
+					gps_time,
+				    src_update_time
+				)
+			SELECT
+					uid,
+			 		dir,
+					suid,
+					est,
+					sts,
+					pl,
+					CASE WHEN geom IS NOT NULL THEN ST_GeomFromText(geom, 4326) END,
+					gps,
+				    stime
+			FROM temp_bus_history;`
+		_, err = b.Exec(ctx, c1)
+		if err != nil {
+			log.Printf("[BUS] action=savebushistory event=insert_error error=%v", err)
+		}
+		if commitErr := b.Commit(ctx); commitErr != nil {
+			log.Printf("[BUS] action=savebushistory event=commit_error error=%v", commitErr)
+		} else {
+			log.Printf("[BUS] action=savebushistory event=complete row_count=%d", len(rows))
+		}
 	}
-	if commitErr := b.Commit(ctx); commitErr != nil {
-		log.Printf("[BUS] action=savebushistory event=commit_error error=%v", commitErr)
-	} else {
-		log.Printf("[BUS] action=savebushistory event=complete row_count=%d", len(rows))
-	}
-}
+*/
 func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
 	query := `SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence 
               FROM bus_station_stop_map 
@@ -273,7 +275,7 @@ func getToken(rc *redis.Client, c *resty.Client) string {
 	}
 	return val
 }
-func process_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
+func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
 	var target string
 	if city == "InterCity" {
 		target = fmt.Sprintf("/v2/Bus/%s/InterCity", api)
@@ -281,7 +283,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 		target = fmt.Sprintf("/v2/Bus/%s/City/%s", api, city)
 	}
 	log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_call", city, api)
-	dec, comp, err, flipopen := call_api(client, rc, target, "bus_"+api+city)
+	dec, comp, err, flipopen := callApi(client, rc, target, "bus_"+api+city)
 	if err != nil || !comp {
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_skip reason=empty", city, api)
 		return
@@ -291,7 +293,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=decode_error error=%v", city, api, err)
 		return
 	}
-	var raw_rows [][]interface{}
+	var rawRows [][]interface{}
 	for dec.More() {
 		var raw json.RawMessage
 		if err := dec.Decode(&raw); err != nil {
@@ -314,7 +316,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 					dest = r.DestinationStopNameZh
 				}
 				uid, _ := makethatsame(city, sub.SubRouteUID, sub.Direction)
-				raw_rows = append(raw_rows, []interface{}{
+				rawRows = append(rawRows, []interface{}{
 					uid, r.RouteUID, r.RouteName.Zhtw, sub.SubRouteName.Zhtw, dep, dest, api, raw,
 				})
 			}
@@ -325,7 +327,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 				fmt.Println(err.Error())
 			}
 			uid, _ := makethatsame(city, s.SubRouteUID, s.Direction)
-			raw_rows = append(raw_rows, []interface{}{
+			rawRows = append(rawRows, []interface{}{
 				uid, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Shape":
@@ -335,7 +337,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 				fmt.Println(err.Error())
 			}
 			uid, _ := makethatsame(city, s.SubRouteUID, s.Direction)
-			raw_rows = append(raw_rows, []interface{}{
+			rawRows = append(rawRows, []interface{}{
 				uid, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Schedule":
@@ -345,7 +347,7 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 				fmt.Println(err.Error())
 			}
 			uid, dir := makethatsame(city, t.SubRouteUID, t.Direction)
-			raw_rows = append(raw_rows, []interface{}{
+			rawRows = append(rawRows, []interface{}{
 				uid, t.RouteUID, fmt.Sprintf("%d", dir), "", "", city, api, raw,
 			})
 		case "Station":
@@ -354,13 +356,13 @@ func process_static(ctx context.Context, client *resty.Client, rc *redis.Client,
 			if err != nil {
 				fmt.Println(err.Error())
 			}
-			raw_rows = append(raw_rows, []interface{}{
+			rawRows = append(rawRows, []interface{}{
 				t.StationUID, t.StationID, t.StationName.Zhtw, "", city, "", api, raw,
 			})
 		}
 	}
-	if len(raw_rows) > 0 {
-		from, err := db.CopyFrom(ctx, pgx.Identifier{"raw_bus_route"}, []string{"sub_route_uid", "route_uid", "route_name", "sub_route_name", "depart", "destin", "type", "content"}, pgx.CopyFromRows(raw_rows))
+	if len(rawRows) > 0 {
+		from, err := db.CopyFrom(ctx, pgx.Identifier{"raw_bus_route"}, []string{"sub_route_uid", "route_uid", "route_name", "sub_route_name", "depart", "destin", "type", "content"}, pgx.CopyFromRows(rawRows))
 		if err != nil {
 			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_error error=%v rows=%d", city, api, err, from)
 		} else {

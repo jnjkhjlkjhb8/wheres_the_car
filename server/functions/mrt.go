@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type mrt_station struct {
+type mrtStation struct {
 	StationPosition struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
@@ -29,7 +29,7 @@ type mrt_station struct {
 		ZhTw string `json:"Zh_tw"`
 	} `json:"StationName"`
 }
-type mrt_firstlast struct {
+type mrtFirstlast struct {
 	LineID                 string `json:"LineID"`
 	StationID              string `json:"StationID"`
 	TripHeadSign           string `json:"TripHeadSign"`
@@ -50,7 +50,7 @@ type mrt_firstlast struct {
 		NationalHolidays bool `json:"NationalHolidays"`
 	} `json:"ServiceDay"`
 }
-type mrt_live struct {
+type mrtLive struct {
 	LineID                 string `json:"LineID"`
 	StationID              string `json:"StationID"`
 	TripHeadSign           string `json:"TripHeadSign"`
@@ -62,18 +62,18 @@ type mrt_live struct {
 	EstimateTime  int32 `json:"EstimateTime"`
 }
 
-func mrt_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func mrtStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=mrt_static event=start")
-	getmrt_station(ctx, client, rc, db)
-	getmrt_firstlast(ctx, client, rc, db)
+	getmrtStation(ctx, client, rc, db)
+	getmrtFirstlast(ctx, client, rc, db)
 	log.Printf("[MRT] action=mrt_static event=complete")
 }
-func getmrt_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=getmrt_station event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
 		log.Printf("[MRT] action=getmrt_station system=%s event=system_start", system)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/Metro/Station/%s", system), "mrt_stations"+system)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/Metro/Station/%s", system), "mrt_stations"+system)
 		if err != nil || !comp {
 			log.Printf("[MRT] action=getmrt_station system=%s event=skip reason=api_error", system)
 			continue
@@ -86,7 +86,7 @@ func getmrt_station(ctx context.Context, client *resty.Client, rc *redis.Client,
 			}
 			var row [][]interface{}
 			for dec.More() {
-				var temp mrt_station
+				var temp mrtStation
 				if err := dec.Decode(&temp); err == nil {
 					g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
 					row = append(row, []interface{}{
@@ -121,7 +121,9 @@ func getmrt_station(ctx context.Context, client *resty.Client, rc *redis.Client,
 					log.Printf("[MRT] action=getmrt_station system=%s event=begin_error error=%v", system, err)
 					return
 				}
-				defer b.Rollback(ctx)
+				defer func(b pgx.Tx, ctx context.Context) {
+					_ = b.Rollback(ctx)
+				}(b, ctx)
 				_, _ = b.Exec(ctx, c1)
 				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"geom", "system", "name", "id", "bike"}, pgx.CopyFromRows(row))
 				if err == nil {
@@ -142,12 +144,12 @@ func getmrt_station(ctx context.Context, client *resty.Client, rc *redis.Client,
 	}
 	log.Printf("[MRT] action=getmrt_station event=complete")
 }
-func getmrt_firstlast(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=getmrt_firstlast event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
 		log.Printf("[MRT] action=getmrt_firstlast system=%s event=system_start", system)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/Metro/FirstLastTimetable/%s", system), "mrt_firstlast"+system)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/Metro/FirstLastTimetable/%s", system), "mrt_firstlast"+system)
 		if err != nil || !comp {
 			log.Printf("[MRT] action=getmrt_firstlast system=%s event=skip reason=api_error", system)
 			continue
@@ -160,7 +162,7 @@ func getmrt_firstlast(ctx context.Context, client *resty.Client, rc *redis.Clien
 			}
 			var row [][]interface{}
 			for dec.More() {
-				var temp mrt_firstlast
+				var temp mrtFirstlast
 				if err := dec.Decode(&temp); err == nil {
 					row = append(row, []interface{}{
 						temp.StationID,
@@ -205,7 +207,9 @@ func getmrt_firstlast(ctx context.Context, client *resty.Client, rc *redis.Clien
 					log.Printf("[MRT] action=getmrt_firstlast system=%s event=begin_error error=%v", system, err)
 					return
 				}
-				defer b.Rollback(ctx)
+				defer func(b pgx.Tx, ctx context.Context) {
+					_ = b.Rollback(ctx)
+				}(b, ctx)
 				_, _ = b.Exec(ctx, c1)
 				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"id", "lid", "sign", "dsid", "dsname", "ft", "lt", "mask", "sys"}, pgx.CopyFromRows(row))
 				if err == nil {
@@ -226,12 +230,12 @@ func getmrt_firstlast(ctx context.Context, client *resty.Client, rc *redis.Clien
 	}
 	log.Printf("[MRT] action=getmrt_firstlast event=complete")
 }
-func mrt_eta(client *resty.Client, rc *redis.Client) {
+func mrtEta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[MRT_ETA] action=mrt_eta event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {
 		log.Printf("[MRT_ETA] action=mrt_eta system=%s event=system_start", system)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Rail/Metro/LiveBoard/%s", system), "mrt_LiveBoard"+system)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/Metro/LiveBoard/%s", system), "mrt_LiveBoard"+system)
 		if err != nil || !comp {
 			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=skip reason=api_error", system)
 			return
@@ -245,7 +249,7 @@ func mrt_eta(client *resty.Client, rc *redis.Client) {
 			defer flipopen()
 			pipe := rc.Pipeline()
 			for dec.More() {
-				var temp mrt_live
+				var temp mrtLive
 				if err := dec.Decode(&temp); err == nil {
 					raw := &models.MrtLive{
 						LineID:                 temp.LineID,

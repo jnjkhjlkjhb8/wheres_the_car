@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type rail_Station struct {
+type railStation struct {
 	StationID   string `json:"StationID"`
 	StationName struct {
 		ZhTw string `json:"Zh_tw"`
@@ -28,7 +28,7 @@ type rail_Station struct {
 	} `json:"StationPosition"`
 	StationCode string `json:"StationCode"`
 }
-type rail_Fare struct {
+type railFare struct {
 	OriginStationID      string `json:"OriginStationID"`
 	DestinationStationID string `json:"DestinationStationID"`
 	Fares                []struct {
@@ -77,7 +77,7 @@ type rail_Fare struct {
 		} `json:"StopTimes"`
 	}
 */
-type Tra_Delay struct {
+type TraDelay struct {
 	TrainNo     string `json:"TrainNo"`
 	StationID   string `json:"StationID"`
 	StationName struct {
@@ -86,7 +86,7 @@ type Tra_Delay struct {
 	DelayTime     uint16 `json:"DelayTime"`
 	SrcUpdateTime string `json:"SrcUpdateTime"`
 }
-type Tra_LiveBoard struct {
+type TraLiveboard struct {
 	StationID   string `json:"StationID"`
 	StationName struct {
 		ZhTw string `json:"Zh_tw"`
@@ -130,16 +130,16 @@ type Tra_LiveBoard struct {
 	} `json:"AvailableSeats"`
 }*/
 
-func rail_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func railStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=rail_static event=start")
-	tra_station(ctx, client, rc, db)
-	thsr_station(ctx, client, rc, db)
-	tra_fare(ctx, client, rc, db)
+	traStation(ctx, client, rc, db)
+	thsrStation(ctx, client, rc, db)
+	traFare(ctx, client, rc, db)
 	log.Printf("[RAIL] action=rail_static event=complete")
 }
-func tra_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=tra_station event=start")
-	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/Station", "tra_stations")
+	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/TRA/Station", "tra_stations")
 	if err != nil || !comp {
 		log.Printf("[RAIL] action=tra_station event=skip reason=api_error")
 		return
@@ -151,7 +151,7 @@ func tra_station(ctx context.Context, client *resty.Client, rc *redis.Client, db
 	}
 	var row [][]interface{}
 	for dec.More() {
-		var temp rail_Station
+		var temp railStation
 		if err := dec.Decode(&temp); err == nil {
 			g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
 			row = append(row, []interface{}{
@@ -183,7 +183,9 @@ func tra_station(ctx context.Context, client *resty.Client, rc *redis.Client, db
 			log.Printf("[RAIL] action=tra_station event=tx_error error=%v", err)
 			return
 		}
-		defer b.Rollback(ctx)
+		defer func(b pgx.Tx, ctx context.Context) {
+			_ = b.Rollback(ctx)
+		}(b, ctx)
 		if _, err := b.Exec(ctx, c1); err != nil {
 			log.Printf("[RAIL] action=tra_station event=create_temp_error error=%v", err)
 			return
@@ -207,9 +209,9 @@ func tra_station(ctx context.Context, client *resty.Client, rc *redis.Client, db
 	}
 	log.Printf("[RAIL] action=tra_station event=complete")
 }
-func thsr_station(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func thsrStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=thsr_station event=start")
-	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/THSR/Station", "thsr_stations")
+	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/THSR/Station", "thsr_stations")
 	if err != nil || !comp {
 		log.Printf("[RAIL] action=thsr_station event=skip reason=api_error")
 		return
@@ -231,7 +233,7 @@ func thsr_station(ctx context.Context, client *resty.Client, rc *redis.Client, d
 			ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW();`
 	batch := &pgx.Batch{}
 	for dec.More() {
-		var temp rail_Station
+		var temp railStation
 		if err := dec.Decode(&temp); err == nil {
 			g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
 			batch.Queue(c1, temp.StationID, temp.StationName.ZhTw, temp.LocationCity, g, temp.StationCode)
@@ -241,9 +243,9 @@ func thsr_station(ctx context.Context, client *resty.Client, rc *redis.Client, d
 	_ = b.Close()
 	log.Printf("[RAIL] action=thsr_station event=complete")
 }
-func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func traFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=tra_fare event=start")
-	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/ODFare", "tra_fare")
+	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/TRA/ODFare", "tra_fare")
 	if err != nil || !comp {
 		log.Printf("[RAIL] action=tra_fare event=skip reason=api_error | noupdate")
 		return
@@ -255,7 +257,7 @@ func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 	}
 	var row [][]interface{}
 	for dec.More() {
-		var temp rail_Fare
+		var temp railFare
 		if err := dec.Decode(&temp); err == nil {
 			for _, t1 := range temp.Fares {
 				row = append(row, []interface{}{temp.OriginStationID, temp.DestinationStationID, t1.TicketType, t1.Price})
@@ -282,7 +284,9 @@ func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 		log.Printf("[RAIL] action=tra_fare event=begin_error error=%v", err)
 		return
 	}
-	defer b.Rollback(ctx)
+	defer func(b pgx.Tx, ctx context.Context) {
+		_ = b.Rollback(ctx)
+	}(b, ctx)
 	_, err = b.Exec(ctx, c1)
 	if err != nil {
 		log.Printf("[RAIL] action=tra_fare event=execute_error error=%v", err)
@@ -304,9 +308,9 @@ func tra_fare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 	}
 }
 
-func tra_eta(client *resty.Client, rc *redis.Client) {
+func traEta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[TRA_ETA] action=tra_eta event=start")
-	dec, comp, err, flipopen := call_api(client, rc, "/v2/Rail/TRA/LiveTrainDelay", "tra_delay")
+	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/TRA/LiveTrainDelay", "tra_delay")
 	if err == nil && comp {
 		func() {
 			defer flipopen()
@@ -314,7 +318,7 @@ func tra_eta(client *resty.Client, rc *redis.Client) {
 				delayCount := 0
 				pipe := rc.Pipeline()
 				for dec.More() {
-					var temp Tra_Delay
+					var temp TraDelay
 					if err := dec.Decode(&temp); err == nil {
 						delayCount++
 						pipe.HSet("tra:delay", temp.TrainNo, temp.DelayTime)
@@ -331,7 +335,7 @@ func tra_eta(client *resty.Client, rc *redis.Client) {
 	} else {
 		log.Printf("[TRA_ETA] action=tra_eta event=skip_delay reason=api_error")
 	}
-	dec, comp, err, flipopen = call_api(client, rc, "/v2/Rail/TRA/LiveBoard", "tra_liveboard")
+	dec, comp, err, flipopen = callApi(client, rc, "/v2/Rail/TRA/LiveBoard", "tra_liveboard")
 	func() {
 		defer flipopen()
 		if err != nil && !comp {
@@ -343,7 +347,7 @@ func tra_eta(client *resty.Client, rc *redis.Client) {
 		delays, _ := rc.HGetAll("tra:delay").Result()
 		res := make(map[string][]*models.Tra_LiveBoard)
 		for dec.More() {
-			var temp Tra_LiveBoard
+			var temp TraLiveboard
 			if err := dec.Decode(&temp); err == nil {
 				if delay, ok := delays[temp.TrainNo]; ok {
 					var inter uint16

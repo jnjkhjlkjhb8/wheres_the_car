@@ -201,7 +201,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
 		}
-		process_static(ctx, c, rc, db, city, "Route", func(raw []byte) {
+		processStatic(ctx, c, rc, db, city, "Route", func(raw []byte) {
 			var r raw_Bus_Route
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -280,7 +280,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})*/
-		process_static(ctx, c, rc, db, city, "Schedule", func(raw []byte) {
+		processStatic(ctx, c, rc, db, city, "Schedule", func(raw []byte) {
 			var r raw_Bus_Schedule
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -316,7 +316,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})
-		process_static(ctx, c, rc, db, city, "Station", func(raw []byte) {})
+		processStatic(ctx, c, rc, db, city, "Station", func(raw []byte) {})
 		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
 		saveschedule(ctx, db, city)
@@ -494,8 +494,10 @@ func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 		"stop_name/MaxHeadwayMins" = EXCLUDED."stop_name/MaxHeadwayMins",
 		"arrival_time/StartTime" = EXCLUDED."arrival_time/StartTime",
 		"departure_time/EndTime" = EXCLUDED."departure_time/EndTime"`*/
-	defer b.Rollback(ctx)
-	b.Exec(ctx, c1)
+	defer func(b pgx.Tx, ctx context.Context) {
+		_ = b.Rollback(ctx)
+	}(b, ctx)
+	_, _ = b.Exec(ctx, c1)
 	if _, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bus"},
 		[]string{"uid", "dir", "type", "id", "floor", "seq", "stopuid", "stopname", "arrival", "departure", "sdays"},
 		pgx.CopyFromRows(row)); err != nil {
@@ -506,7 +508,7 @@ func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 		log.Printf("[BUS] action=saveschedule city=%s event=insert_error error=%v", city, err)
 		return
 	}
-	b.Commit(ctx)
+	_ = b.Commit(ctx)
 	log.Printf("[BUS] action=saveschedule city=%s event=complete row_count=%d", city, len(row))
 }
 
@@ -535,7 +537,9 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 		}
 	}
 	b, err := db.Begin(ctx)
-	defer b.Rollback(ctx)
+	defer func(b pgx.Tx, ctx context.Context) {
+		_ = b.Rollback(ctx)
+	}(b, ctx)
 	if err != nil {
 		log.Printf("[BUS] action=savestatictodb event=begin_error error=%v", err)
 		return
@@ -631,7 +635,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		} else {
 			url = fmt.Sprintf("/v2/Bus/EstimatedTimeOfArrival/City/%s", city)
 		}
-		dec, comp, err, flipopen := call_api(client, rc, url, "bus_EstimatedTimeOfArrival"+city)
+		dec, comp, err, flipopen := callApi(client, rc, url, "bus_EstimatedTimeOfArrival"+city)
 		if err == nil && comp {
 			if _, err := dec.Token(); err == nil {
 				for dec.More() {
@@ -649,7 +653,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		} else {
 			url = fmt.Sprintf("/v2/Bus/RealTimeByFrequency/City/%s", city)
 		}
-		dec, comp, err, flipopen = call_api(client, rc, url, "bus_RealTimeByFrequency"+city)
+		dec, comp, err, flipopen = callApi(client, rc, url, "bus_RealTimeByFrequency"+city)
 		if err == nil && comp {
 			if _, err := dec.Token(); err == nil {
 				for dec.More() {
@@ -757,7 +761,7 @@ func bus_dailyroute(client *resty.Client, rc *redis.Client) {
 			continue
 		}
 		log.Printf("[bus] action=bus_dailyroute city=%s event=city_start", city)
-		dec, comp, err, flipopen := call_api(client, rc, fmt.Sprintf("/v2/Bus/DailyTimeTable/City/%s", city), "DailyTimeTable"+city)
+		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Bus/DailyTimeTable/City/%s", city), "DailyTimeTable"+city)
 		if err != nil || !comp {
 			log.Printf("[bus] action=bus_dailyroute city=%s event=skip reason=api_error,error=%s", city, err)
 			continue
