@@ -24,7 +24,7 @@ var cities = []string{
 	"YilanCounty", "HualienCounty", "TaitungCounty", "PenghuCounty", "KinmenCounty", "LienchiangCounty", "Keelung",
 }
 
-type raw_Bus_Route struct {
+type rawBusRoute struct {
 	RouteUID  string `json:"RouteUID"`
 	RouteName struct {
 		Zhtw string `json:"Zh_tw"`
@@ -41,7 +41,7 @@ type raw_Bus_Route struct {
 		DestinationStopNameZh string `json:"DestinationStopNameZh,omitempty"`
 	} `json:"SubRoutes"`
 }
-type raw_Stopofroute struct {
+type rawStopofroute struct {
 	RouteUID    string `json:"RouteUID"`
 	SubRouteUID string `json:"SubRouteUID"`
 	Direction   uint8  `json:"Direction"`
@@ -59,7 +59,7 @@ type raw_Stopofroute struct {
 		LocationCityCode string `json:"LocationCityCode"`
 	} `json:"Stops"`
 }
-type raw_Bus_DailyTimetable struct {
+type rawBusDailytimetable struct {
 	SubRouteUID string `json:"SubRouteUID"`
 	Direction   uint8  `json:"Direction"`
 	Timetables  []struct {
@@ -72,7 +72,7 @@ type raw_Bus_DailyTimetable struct {
 		} `json:"StopTimes"`
 	} `json:"Timetables"`
 }
-type raw_Bus_Schedule struct {
+type rawBusSchedule struct {
 	SubRouteUID string `json:"SubRouteUID"`
 	RouteUID    string `json:"RouteUID"`
 	Direction   uint8  `json:"Direction"`
@@ -115,7 +115,7 @@ type raw_Bus_Schedule struct {
 	} `json:"Frequencys"`
 }
 
-type raw_Bus_Esimated struct {
+type rawBusEsimated struct {
 	PlateNumb     string `json:"PlateNumb"`
 	StopUID       string `json:"StopUID"`
 	SubRouteUID   string `json:"SubRouteUID"`
@@ -125,7 +125,7 @@ type raw_Bus_Esimated struct {
 	StopStatus    uint8  `json:"StopStatus"`
 	SrcUpdateTime string `json:"SrcUpdateTime"`
 }
-type raw_Bus_Position struct {
+type rawBusPosition struct {
 	PlateNumb   string `json:"PlateNumb"`
 	SubRouteUID string `json:"SubRouteUID"`
 	StopUID     string `json:"StopUID"`
@@ -140,7 +140,7 @@ type raw_Bus_Position struct {
 	BusStatus  uint8   `json:"BusStatus"`
 	GPSTime    string  `json:"GPSTime"`
 }
-type Bus_stationmap struct {
+type BusStationmap struct {
 	StationUID   string
 	StationName  string
 	SubRouteUID  string
@@ -164,7 +164,7 @@ type Bus_stationmap struct {
 		SrcUpdateTime time.Time
 	}
 */
-type raw_Bus_Shape struct {
+type rawBusShape struct {
 	SubRouteUID string `json:"SubRouteUID,omitempty"`
 	RouteUID    string `json:"RouteUID"`
 	Direction   uint8  `json:"Direction"`
@@ -172,7 +172,7 @@ type raw_Bus_Shape struct {
 	UpdateTime  string `json:"UpdateTime"`
 }
 
-type raw_Bus_Station struct {
+type rawBusStation struct {
 	StationUID  string `json:"StationUID"`
 	StationID   string `json:"StationID"`
 	StationName struct {
@@ -184,9 +184,9 @@ type raw_Bus_Station struct {
 	} `json:"StationPosition"`
 }
 
-func bus_static(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func busStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	dailyRoute(ctx, rc, client, db)
-	bus_dailyroute(client, rc)
+	busDailyroute(client, rc)
 }
 func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 	log.Printf("[BUS] action=dailyRoute event=start")
@@ -202,7 +202,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
 		}
 		processStatic(ctx, c, rc, db, city, "Route", func(raw []byte) {
-			var r raw_Bus_Route
+			var r rawBusRoute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
 				log.Printf("[BUS] action=dailyRoute city=%s api=Route event=unmarshal_error error=%v", city, err)
@@ -281,7 +281,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			}
 		})*/
 		processStatic(ctx, c, rc, db, city, "Schedule", func(raw []byte) {
-			var r raw_Bus_Schedule
+			var r rawBusSchedule
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
 				log.Printf("[BUS] action=dailyRoute city=%s api=Schedule event=unmarshal_error error=%v", city, err)
@@ -321,7 +321,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		savestations(ctx, db, city)
 		saveschedule(ctx, db, city)
 		savestatictodb(ctx, db, &subRoutemap)
-		bus_dailytable(rc, city, &subRoutemap)
+		busDailytable(rc, city, &subRoutemap)
 		_, err = db.Exec(ctx, "truncate raw_bus_route;")
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_raw_error error=%v", city, err)
@@ -444,7 +444,7 @@ func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 		if err := rows.Scan(&raw); err != nil {
 			continue
 		}
-		var temp raw_Bus_Schedule
+		var temp rawBusSchedule
 		if err := json.Unmarshal(raw, &temp); err != nil {
 			log.Printf("[BUS] action=saveschedule city=%s event=unmarshal_error error=%v", city, err)
 			continue
@@ -597,7 +597,7 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 	}
 }
 
-func bus_dailytable(rc *redis.Client, city string, raw *map[string]*models.Subroute) {
+func busDailytable(rc *redis.Client, city string, raw *map[string]*models.Subroute) {
 	pipe := rc.Pipeline()
 	count := 0
 	for uid, sub := range *raw {
@@ -616,7 +616,7 @@ func bus_dailytable(rc *redis.Client, city string, raw *map[string]*models.Subro
 	log.Printf("[BUS] action=cacheBusDailyTable city=%s event=complete row_count=%d", city, count)
 }
 
-func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[BUS_ETA] action=Bus_eta event=start")
 	for _, city := range cities {
 		if city == "ChanghuaCounty" || city == "NantouCounty" {
@@ -628,7 +628,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=skip_empty reason=no_stations", city)
 			continue
 		}
-		var eat []raw_Bus_Esimated
+		var eat []rawBusEsimated
 		var url string
 		if city == "InterCity" {
 			url = "/v2/Bus/EstimatedTimeOfArrival/InterCity"
@@ -639,7 +639,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		if err == nil && comp {
 			if _, err := dec.Token(); err == nil {
 				for dec.More() {
-					var e raw_Bus_Esimated
+					var e rawBusEsimated
 					if err := dec.Decode(&e); err == nil {
 						eat = append(eat, e)
 					}
@@ -647,7 +647,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 			}
 			flipopen()
 		}
-		var posit []raw_Bus_Position
+		var posit []rawBusPosition
 		if city == "InterCity" {
 			url = "/v2/Bus/RealTimeByFrequency/InterCity"
 		} else {
@@ -657,7 +657,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		if err == nil && comp {
 			if _, err := dec.Token(); err == nil {
 				for dec.More() {
-					var p raw_Bus_Position
+					var p rawBusPosition
 					if err := dec.Decode(&p); err == nil {
 						posit = append(posit, p)
 					}
@@ -666,7 +666,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 			flipopen()
 		}
 		busmap := make(map[string][]*models.BusPosition)
-		etamap := make(map[string]raw_Bus_Esimated)
+		etamap := make(map[string]rawBusEsimated)
 		stations := make(map[string]*models.Bus_StationArrival)
 		routes := make(map[string]*models.Bus_RouteArrival)
 		for _, eat := range eat {
@@ -730,7 +730,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 				Direction:     int32(b.Direction),
 				Estimate:      int32(est),
 				StopStatus:    int32(status),
-				NextBusTime:   string(eta.NextBusTime),
+				NextBusTime:   eta.NextBusTime,
 				SrcUpdateTime: stime,
 				Buses:         busmap[b.SubRouteUID],
 			})
@@ -754,7 +754,7 @@ func Bus_eta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 	}
 	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }
-func bus_dailyroute(client *resty.Client, rc *redis.Client) {
+func busDailyroute(client *resty.Client, rc *redis.Client) {
 	log.Printf("[bus] action=bus_dailyroute event=start")
 	for _, city := range cities {
 		if city == "Taipei" || city == "NewTaipei" || city == "Tainan" {
@@ -775,7 +775,7 @@ func bus_dailyroute(client *resty.Client, rc *redis.Client) {
 			pipe := rc.Pipeline()
 			mp := make(map[string]map[int32]*models.Temp)
 			for dec.More() {
-				var temp raw_Bus_DailyTimetable
+				var temp rawBusDailytimetable
 				if err := dec.Decode(&temp); err == nil {
 					uid, dir := makethatsame(city, temp.SubRouteUID, temp.Direction)
 					if _, exists := mp[uid]; !exists {

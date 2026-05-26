@@ -48,7 +48,7 @@ func main() {
 	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
-		bus_static(ctx, c, rc, db)
+		busStatic(ctx, c, rc, db)
 		bikeStatic(ctx, c, rc, db)
 		mrtStatic(ctx, c, rc, db)
 		railStatic(ctx, c, rc, db)
@@ -62,7 +62,7 @@ func main() {
 	_, _ = r.AddFunc("@every 30s", func() {
 		log.Println("[crontab] action=bus&bike event=start")
 		bikeEta(c, rc)
-		Bus_eta(context.Background(), c, rc, db)
+		BusEta(context.Background(), c, rc, db)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
 	_, _ = r.AddFunc("@every 10s", func() {
@@ -187,7 +187,7 @@ func callApi(client *resty.Client, rc *redis.Client, url string, name string) (j
 		}
 	}
 */
-func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]Bus_stationmap, error) {
+func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]BusStationmap, error) {
 	query := `SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence 
               FROM bus_station_stop_map 
               WHERE sub_route_uid LIKE $1`
@@ -196,9 +196,9 @@ func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]Bus_stat
 		return nil, err
 	}
 	defer rows.Close()
-	var list []Bus_stationmap
+	var list []BusStationmap
 	for rows.Next() {
-		var temp Bus_stationmap
+		var temp BusStationmap
 		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID, &temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence)
 		if err != nil {
 			fmt.Println(err)
@@ -302,7 +302,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		processer(raw)
 		switch api {
 		case "Route":
-			var r raw_Bus_Route
+			var r rawBusRoute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
 				log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=unmarshal_error error=%v", city, api, err)
@@ -321,7 +321,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				})
 			}
 		case "StopOfRoute":
-			var s raw_Stopofroute
+			var s rawStopofroute
 			err := json.Unmarshal(raw, &s)
 			if err != nil {
 				fmt.Println(err.Error())
@@ -331,7 +331,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				uid, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Shape":
-			var s raw_Bus_Shape
+			var s rawBusShape
 			err := json.Unmarshal(raw, &s)
 			if err != nil {
 				fmt.Println(err.Error())
@@ -341,7 +341,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				uid, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Schedule":
-			var t raw_Bus_Schedule
+			var t rawBusSchedule
 			err := json.Unmarshal(raw, &t)
 			if err != nil {
 				fmt.Println(err.Error())
@@ -351,7 +351,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				uid, t.RouteUID, fmt.Sprintf("%d", dir), "", "", city, api, raw,
 			})
 		case "Station":
-			var t raw_Bus_Station
+			var t rawBusStation
 			err := json.Unmarshal(raw, &t)
 			if err != nil {
 				fmt.Println(err.Error())
