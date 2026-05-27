@@ -1,13 +1,16 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
-service request_mrt{
-  rpc eta(requestmrt) returns (stream mrt_live) {}
+service Mrt_Service{
+  rpc eta(Ask_mrt) returns (stream Resp_Mrt_eta) {}
 }
-message requestmrt{
+message Resp_Mrt_eta{
+  bytes data = 1;
+}
+message Ask_mrt{
   string system = 1;
   string StationID = 2;
 }
-message mrt_live{
+message Mrt_live{
   string LineID = 1;
   string StationID = 2;
   string system = 3;

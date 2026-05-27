@@ -33,6 +33,7 @@ type mrtFirstlast struct {
 	LineID                 string `json:"LineID"`
 	StationID              string `json:"StationID"`
 	TripHeadSign           string `json:"TripHeadSign"`
+	city                   string
 	DestinationStaionID    string `json:"DestinationStaionID"`
 	DestinationStationName struct {
 		ZhTw string `json:"Zh_tw"`
@@ -54,6 +55,7 @@ type mrtLive struct {
 	LineID                 string `json:"LineID"`
 	StationID              string `json:"StationID"`
 	TripHeadSign           string `json:"TripHeadSign"`
+	city                   string
 	DestinationStaionID    string `json:"DestinationStaionID"`
 	DestinationStationName struct {
 		ZhTw string `json:"Zh_tw"`
@@ -115,7 +117,7 @@ func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, 
 					created_at
 				)
 				SELECT st_geomfromtext(geom, 4326), system, name, id, bike,NOW() FROM temp_mrt
-				ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name,system = EXCLUDED.system,stationposition = EXCLUDED.stationposition,created_at = NOW();`
+				ON CONFLICT (station_id,system) DO UPDATE SET name = EXCLUDED.name,stationposition = EXCLUDED.stationposition,created_at = NOW();`
 				b, err := db.Begin(ctx)
 				if err != nil {
 					log.Printf("[MRT] action=getmrt_station system=%s event=begin_error error=%v", system, err)
@@ -265,7 +267,7 @@ func mrtEta(client *resty.Client, rc *redis.Client) {
 					if err != nil {
 						continue
 					}
-					pipe.Set(fmt.Sprintf("mrt_live:%s", temp.StationID), pb, 2*time.Minute)
+					pipe.Set(fmt.Sprintf("mrt_live:%s:%s", system, temp.StationID), pb, 2*time.Minute)
 				}
 			}
 			_, _ = pipe.Exec()

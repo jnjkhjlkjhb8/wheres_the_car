@@ -39,44 +39,6 @@ type railFare struct {
 	} `json:"Fares"`
 }
 
-/*
-	type rail_DailyTrain struct {
-		TrainDate      string `json:"TrainDate"`
-		DailyTrainInfo struct {
-			TrainNo           string `json:"TrainNo"`
-			Direction         bool   `json:"Direction"`
-			StartingStationID string `json:"StartingStationID"`
-			EndingStationID   string `json:"EndingStationID"`
-			TrainTypeID       string `json:"TrainTypeID"`
-			TrainTypeCode     string `json:"TrainTypeCode"`
-			TrainTypeName     struct {
-				ZhTw string `json:"Zh_tw"`
-			} `json:"TrainTypeName"`
-			TripLine           uint8 `json:"TripLine"`
-			WheelchairFlag     bool  `json:"WheelchairFlag"`
-			PackageServiceFlag bool  `json:"PackageServiceFlag"`
-			DiningFlag         bool  `json:"DiningFlag"`
-			BikeFlag           bool  `json:"BikeFlag"`
-			BreastFeedingFlag  bool  `json:"BreastFeedingFlag"`
-			DailyFlag          bool  `json:"DailyFlag"`
-			ServiceAddedFlag   bool  `json:"ServiceAddedFlag"`
-			SuspendedFlag      bool  `json:"SuspendedFlag"`
-			Note               struct {
-				ZhTw string `json:"Zh_tw"`
-			} `json:"Note"`
-		} `json:"DailyTrainInfo"`
-		StopTimes []struct {
-			StopSequence uint8  `json:"StopSequence"`
-			StationID    string `json:"StationID"`
-			StationName  struct {
-				ZhTw string `json:"Zh_tw"`
-			} `json:"StationName"`
-			ArrivalTime   string `json:"ArrivalTime"`
-			DepartureTime string `json:"DepartureTime"`
-			SuspendedFlag bool   `json:"SuspendedFlag"`
-		} `json:"StopTimes"`
-	}
-*/
 type TraDelay struct {
 	TrainNo     string `json:"TrainNo"`
 	StationID   string `json:"StationID"`

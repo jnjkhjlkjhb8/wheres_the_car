@@ -239,7 +239,7 @@ func connectredis() *redis.Client {
 	pong, err := client.Ping().Result()
 	if err != nil {
 		log.Printf("[REDIS] action=connect event=failed error=%v", err)
-		//panic(err)
+		panic(err)
 	}
 	log.Printf("[REDIS] action=connect event=success pong=%s", pong)
 	return client
@@ -253,7 +253,7 @@ func connectdb() *pgxpool.Pool {
 	err = conn.Ping(context.Background())
 	if err != nil {
 		log.Printf("[DB] action=ping event=failed error=%v", err)
-		//panic(err)
+		panic(err)
 	}
 	log.Printf("[DB] action=connect event=success")
 	return conn

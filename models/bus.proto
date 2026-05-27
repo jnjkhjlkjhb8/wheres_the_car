@@ -1,19 +1,30 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
-service BusRoute{
-  rpc static(requestroute) returns (subroute) {}
-  rpc eta(requestroute) returns (stream Bus_RouteArrival) {}
+service Bus_Route_Service{
+  rpc static(Bus_Ask_Route) returns (Resp_Bus_static) {}
+  rpc daily(Bus_Ask_Route) returns (Resp_Bus_daily_timetable) {}
+  rpc eta(Bus_Ask_Route) returns (stream Resp_Bus_eta) {}
 }
-service BusStation{
-  rpc eta(requeststation) returns (stream Bus_StationArrival) {}
+service Bus_Station_Service{
+  rpc eta(Bus_Ask_Route) returns (stream Resp_Bus_eta) {}
 }
-message requestroute {
+message Bus_Ask_Route {
   string SubRouteUID = 1;
 }
-message requeststation{
-  string StationUID = 1;
+message Bus_Ask_Station {
+  string StationName = 1;
+  string city = 2;
 }
-message subroute{
+message Resp_Bus_static{
+  bytes data = 1;
+}
+message Resp_Bus_eta{
+  bytes data = 1;
+}
+message Resp_Bus_daily_timetable{
+  bytes data = 1;
+}
+message Bus_subroute{
   string RouteUID = 1;
   string RouteName = 2;
   string SubRouteUID = 3;
@@ -27,11 +38,11 @@ message Direction{
   string DepartureStopName = 1;
   string DestinationStopName = 2;
   string Geometry = 3;
-  repeated stop Stops = 4;
+  repeated Bus_stop Stops = 4;
   repeated Bus_Schedule Schedules = 5;
 }
 
-message stop{
+message Bus_stop{
   string StopUID = 1;
   string StopName = 2;
   int32 StopSequence = 3;
@@ -43,7 +54,7 @@ message stop{
 message RouteOfStop{
   string SubRouteUID = 2;
   int32 Direction = 3;
-  repeated stop Stops = 4;
+  repeated Bus_stop Stops = 4;
 }
 
 message Shape{

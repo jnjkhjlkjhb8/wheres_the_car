@@ -203,7 +203,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			continue
 		}
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_start", city)
-		subRoutemap := make(map[string]*models.Subroute)
+		subRoutemap := make(map[string]*models.BusSubroute)
 		routeMap := make(map[string][]string)
 		_, err := db.Exec(ctx, "DELETE FROM raw_bus_route WHERE destin = $1 OR depart = $1", city)
 		if err != nil {
@@ -218,7 +218,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			for _, sub := range r.SubRoutes {
 				uid, dir := makethatsame(city, sub.SubRouteUID, sub.Direction)
 				if _, ok := subRoutemap[uid]; !ok {
-					subRoutemap[uid] = &models.Subroute{
+					subRoutemap[uid] = &models.BusSubroute{
 						RouteUID:     r.RouteUID,
 						RouteName:    r.RouteName.Zhtw,
 						SubRouteUID:  uid,
@@ -338,7 +338,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 	}
 	log.Printf("[BUS] action=dailyRoute event=complete")
 }
-func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.Subroute) {
+func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.BusSubroute) {
 	var row [][]interface{}
 	for _, sub := range *raw {
 		for dir, d := range sub.Directions {
@@ -520,7 +520,7 @@ func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 	log.Printf("[BUS] action=saveschedule city=%s event=complete row_count=%d", city, len(row))
 }
 
-func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.Subroute) {
+func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*models.BusSubroute) {
 	var row [][]interface{}
 	var mp [][]interface{}
 	for _, sub := range *raw {
@@ -605,7 +605,7 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 	}
 }
 
-func busDailytable(rc *redis.Client, city string, raw *map[string]*models.Subroute) {
+func busDailytable(rc *redis.Client, city string, raw *map[string]*models.BusSubroute) {
 	pipe := rc.Pipeline()
 	count := 0
 	for uid, sub := range *raw {
@@ -615,7 +615,6 @@ func busDailytable(rc *redis.Client, city string, raw *map[string]*models.Subrou
 			continue
 		}
 		pipe.Set(fmt.Sprintf("bus_dailytable:%s", uid), data, 23*time.Hour)
-		pipe.Set(fmt.Sprintf("bus_dailytable:%s:%s", city, uid), data, 23*time.Hour)
 	}
 	if _, err := pipe.Exec(); err != nil {
 		log.Printf("[BUS] action=cacheBusDailyTable city=%s event=redis_error error=%v row_count=%d", city, err, count)
@@ -750,7 +749,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 		}
 		for uid, pb := range routes {
 			data, _ := proto.Marshal(pb)
-			pipe.Set(fmt.Sprintf("bus_eta_route:%s:%s", city, uid), data, 180*time.Second)
+			pipe.Set(fmt.Sprintf("bus_eta_route:%s", uid), data, 180*time.Second)
 		}
 		_, err = pipe.Exec()
 		if err != nil {

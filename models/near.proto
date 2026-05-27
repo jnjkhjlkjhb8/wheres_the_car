@@ -1,12 +1,11 @@
 syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 
-
-service Near_Station{
-  rpc near(stream ask_near) returns (stream NearStation) {}
+service Near_Station_Service{
+  rpc near(stream Ask_Near) returns (stream NearStation) {}
 }
 
-message ask_near{
+message Ask_Near{
   double PositionLon = 1;
   double PositionLat = 2;
   int32 Radius = 3;
