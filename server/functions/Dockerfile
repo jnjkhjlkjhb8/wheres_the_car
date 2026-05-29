@@ -7,7 +7,7 @@ RUN go mod download
 COPY models/ ./models/
 COPY server/ ./server/
 RUN protoc --go_out=. --go_opt=paths=source_relative models/*.proto
-RUN CGO_ENABLED=0 GOOS=linux go build -o handler ./server/functions
+RUN CGO_ENABLED=0 GOMEMLIMIT=400MiB GOOS=linux go build -o handler ./server/functions
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates

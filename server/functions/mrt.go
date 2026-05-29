@@ -72,7 +72,7 @@ func mrtStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *
 }
 func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[MRT] action=getmrt_station event=start")
-	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
+	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC", "NTMC"}
 	for _, system := range systems {
 		log.Printf("[MRT] action=getmrt_station system=%s event=system_start", system)
 		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/Metro/Station/%s", system), "mrt_stations"+system)
@@ -95,6 +95,7 @@ func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, 
 						g,
 						system,
 						temp.StationName.ZhTw,
+						temp.LocationCity,
 						temp.StationID,
 						temp.BikeAllowOnHoliday,
 					})
@@ -102,22 +103,24 @@ func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			}
 			if len(row) > 0 {
 				c1 := `CREATE TEMP TABLE temp_mrt (
-                                geom text,
-                                system text,
-								name text,
-								id text,
-                                bike bool
+					geom text,
+					system text,
+					name text,
+					city text,
+					id text,
+					bike bool
 				) ON COMMIT DROP;`
 				c2 := `INSERT INTO mrt_station (
 					stationposition,
 					system,
 					name,
+					city,
 					station_id,
 					bikeallowonholiday,
-					created_at
+					updated_at
 				)
-				SELECT st_geomfromtext(geom, 4326), system, name, id, bike,NOW() FROM temp_mrt
-				ON CONFLICT (station_id,system) DO UPDATE SET name = EXCLUDED.name,stationposition = EXCLUDED.stationposition,created_at = NOW();`
+				SELECT st_geomfromtext(geom, 4326), system, name, city,id, bike,NOW() FROM temp_mrt
+				ON CONFLICT (station_id,system) DO UPDATE SET name = EXCLUDED.name,city = excluded.city,stationposition = EXCLUDED.stationposition,updated_at = NOW();`
 				b, err := db.Begin(ctx)
 				if err != nil {
 					log.Printf("[MRT] action=getmrt_station system=%s event=begin_error error=%v", system, err)
@@ -127,7 +130,7 @@ func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, 
 					_ = b.Rollback(ctx)
 				}(b, ctx)
 				_, _ = b.Exec(ctx, c1)
-				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"geom", "system", "name", "id", "bike"}, pgx.CopyFromRows(row))
+				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_mrt"}, []string{"geom", "system", "name", "city", "id", "bike"}, pgx.CopyFromRows(row))
 				if err == nil {
 					if _, execErr := b.Exec(ctx, c2); execErr != nil {
 						log.Printf("[MRT] action=getmrt_station system=%s event=exec_error error=%v", system, execErr)

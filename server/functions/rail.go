@@ -21,21 +21,30 @@ type railStation struct {
 	StationName struct {
 		ZhTw string `json:"Zh_tw"`
 	} `json:"StationName"`
-	LocationCity    string `json:"LocationCity"`
-	StationPosition struct {
+	LocationCityCode string `json:"LocationCityCode"`
+	StationPosition  struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
 	StationCode string `json:"StationCode"`
 }
-type railFare struct {
+type tra_fare struct {
 	OriginStationID      string `json:"OriginStationID"`
 	DestinationStationID string `json:"DestinationStationID"`
 	Fares                []struct {
 		TicketType string `json:"TicketType"`
-		FareClass  int32  `json:"FareClass"`
-		CabinClass int32  `json:"CabinClass"`
 		Price      int32  `json:"Price"`
+	} `json:"Fares"`
+}
+
+type thsr_fare struct {
+	OriginStationID      string `json:"OriginStationID"`
+	DestinationStationID string `json:"DestinationStationID"`
+	Fares                []struct {
+		TicketType uint8  `json:"TicketType"`
+		FareClass  uint8  `json:"FareClass"`
+		CabinClass uint8  `json:"CabinClass"`
+		Price      uint16 `json:"Price"`
 	} `json:"Fares"`
 }
 
@@ -97,6 +106,7 @@ func railStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db 
 	traStation(ctx, client, rc, db)
 	thsrStation(ctx, client, rc, db)
 	traFare(ctx, client, rc, db)
+	thsrFare(ctx, client, rc, db)
 	log.Printf("[RAIL] action=rail_static event=complete")
 }
 func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
@@ -119,7 +129,7 @@ func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db 
 			row = append(row, []interface{}{
 				temp.StationID,
 				temp.StationName.ZhTw,
-				temp.LocationCity,
+				citymap2[temp.StationName.ZhTw],
 				g,
 			})
 		}
@@ -135,11 +145,12 @@ func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db 
 					station_id,
 					name,
 					city,
-					geom
+					geom,
+					updated_at
 				)
-				SELECT station_id, name, city, ST_GeomFromText(geom, 4326)
+				SELECT station_id, name, city, ST_GeomFromText(geom, 4326),NOW()
 				FROM temp_tra
-				ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name, city = EXCLUDED.city, geom = EXCLUDED.geom;`
+				ON CONFLICT (station_id) DO UPDATE SET name = EXCLUDED.name, city = EXCLUDED.city, geom = EXCLUDED.geom,updated_at = NOW();`
 		b, err := db.Begin(ctx)
 		if err != nil {
 			log.Printf("[RAIL] action=tra_station event=tx_error error=%v", err)
@@ -198,7 +209,7 @@ func thsrStation(ctx context.Context, client *resty.Client, rc *redis.Client, db
 		var temp railStation
 		if err := dec.Decode(&temp); err == nil {
 			g := fmt.Sprintf("POINT(%.6f %.6f)", temp.StationPosition.PositionLon, temp.StationPosition.PositionLat)
-			batch.Queue(c1, temp.StationID, temp.StationName.ZhTw, temp.LocationCity, g, temp.StationCode)
+			batch.Queue(c1, temp.StationID, temp.StationName.ZhTw, citymap2[temp.LocationCityCode], g, temp.StationCode)
 		}
 	}
 	b := db.SendBatch(ctx, batch)
@@ -219,7 +230,7 @@ func traFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 	}
 	var row [][]interface{}
 	for dec.More() {
-		var temp railFare
+		var temp tra_fare
 		if err := dec.Decode(&temp); err == nil {
 			for _, t1 := range temp.Fares {
 				row = append(row, []interface{}{temp.OriginStationID, temp.DestinationStationID, t1.TicketType, t1.Price})
@@ -267,6 +278,74 @@ func traFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		}
 	} else {
 		log.Printf("[RAIL] action=tra_fare event=copyfrom_error error=%v", err)
+	}
+}
+func thsrFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[RAIL] action=thsr_fare event=start")
+	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/THSR/ODFare", "thsr_fare")
+	if err != nil || !comp {
+		log.Printf("[RAIL] action=thsr_fare event=skip reason=api_error | noupdate")
+		return
+	}
+	defer flipopen()
+	if _, err := dec.Token(); err != nil {
+		log.Printf("[RAIL] action=thsr_fare event=decode_error error=%v", err)
+		return
+	}
+	var row [][]interface{}
+	for dec.More() {
+		var temp thsr_fare
+		if err := dec.Decode(&temp); err == nil {
+			for _, t1 := range temp.Fares {
+				row = append(row, []interface{}{temp.OriginStationID, temp.DestinationStationID, t1.TicketType, t1.FareClass, t1.CabinClass, t1.Price})
+			}
+		}
+	}
+	c1 := `CREATE TEMP TABLE temp_thsr (
+				origin_station_id text,
+				destination_station_id text,
+				ticket_type smallint,
+				fare_class smallint,
+				cabin_class smallint,
+				price int
+			) ON COMMIT DROP;`
+	c2 := `INSERT INTO thsr_fares (
+				origin_station_id,
+				destination_station_id,
+				ticket_type,
+				fare_class,
+				cabin_class,
+				price
+			)
+			SELECT origin_station_id, destination_station_id, ticket_type, fare_class,cabin_class,price FROM temp_thsr
+			ON CONFLICT (origin_station_id, destination_station_id, ticket_type, fare_class, cabin_class) 
+			DO UPDATE SET price = EXCLUDED.price`
+	b, err := db.Begin(ctx)
+	if err != nil {
+		log.Printf("[RAIL] action=thsr_fare event=begin_error error=%v", err)
+		return
+	}
+	defer func(b pgx.Tx, ctx context.Context) {
+		_ = b.Rollback(ctx)
+	}(b, ctx)
+	_, err = b.Exec(ctx, c1)
+	if err != nil {
+		log.Printf("[RAIL] action=thsr_fare event=execute_error error=%v", err)
+		return
+	}
+	_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_thsr"}, []string{"origin_station_id", "destination_station_id", "ticket_type", "fare_class", "cabin_class", "price"}, pgx.CopyFromRows(row))
+	if err == nil {
+		if _, execErr := b.Exec(ctx, c2); execErr != nil {
+			log.Printf("[RAIL] action=thsr_fare event=exec_error error=%v", execErr)
+			return
+		}
+		if commitErr := b.Commit(ctx); commitErr != nil {
+			log.Printf("[RAIL] action=thsr_fare event=commit_error error=%v", commitErr)
+		} else {
+			log.Printf("[RAIL] action=thsr_fare event=complete row_count=%d", len(row))
+		}
+	} else {
+		log.Printf("[RAIL] action=thsr_fare event=copyfrom_error error=%v", err)
 	}
 }
 

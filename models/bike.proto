@@ -16,9 +16,10 @@ message Bike_static{
   string name = 2;
   int32 service_type = 3;
   int32 capacity = 4;
-  string Lat = 5;
-  string Lon = 6;
-  string address = 7;
+  string city = 5;
+  string Lat = 6;
+  string Lon = 7;
+  string address = 8;
 }
 message Bike_eta{
   string StationUID = 1;

@@ -80,6 +80,7 @@ func getbikeStation(ctx context.Context, client *resty.Client, rc *redis.Client,
 						strings.TrimPrefix(temp.StationName.ZhTw, "YouBike2.0_"),
 						temp.BikesCapacity,
 						temp.ServiceType,
+						city,
 						g,
 						temp.StationAddress.ZhTw,
 					})
@@ -92,6 +93,7 @@ func getbikeStation(ctx context.Context, client *resty.Client, rc *redis.Client,
                             name text,
                             cap int,
                             type int,
+							city text,
                             geom text,
                             addr text
 					) ON COMMIT DROP`
@@ -101,19 +103,20 @@ func getbikeStation(ctx context.Context, client *resty.Client, rc *redis.Client,
                            name,
                            capacity,
                            service_type,
+						   city,
                            geom,
                            address,
                            updated_at
 					)
-					SELECT uid, id, name, cap, type, st_geomfromtext(geom, 4326) AS temp, addr AS address,NOW() FROM temp_bike 
-					ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,capacity = EXCLUDED.capacity,service_type = EXCLUDED.service_type,geom = EXCLUDED.geom,address = EXCLUDED.address,updated_at = NOW();`
+					SELECT uid, id, name, cap, type, city,st_geomfromtext(geom, 4326) AS temp, addr AS address,NOW() FROM temp_bike 
+					ON CONFLICT (station_uid) DO UPDATE SET name = EXCLUDED.name,capacity = EXCLUDED.capacity,service_type = EXCLUDED.service_type,city = excluded.city,geom = EXCLUDED.geom,address = EXCLUDED.address,updated_at = NOW();`
 				b, err := db.Begin(ctx)
 				if err != nil {
 					log.Println(err.Error())
 					return
 				}
 				_, _ = b.Exec(ctx, c1)
-				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bike"}, []string{"uid", "id", "name", "cap", "type", "geom", "addr"}, pgx.CopyFromRows(row))
+				_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_bike"}, []string{"uid", "id", "name", "cap", "type", "city", "geom", "addr"}, pgx.CopyFromRows(row))
 				if err == nil {
 					if _, execErr := b.Exec(ctx, c2); execErr != nil {
 						log.Printf("[BIKE] action=getbike_station city=%s event=exec_error error=%v", city, execErr)

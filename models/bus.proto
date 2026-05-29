@@ -31,7 +31,8 @@ message Bus_subroute{
   string SubRouteName = 4;
   string DepartureStopName = 5;
   string DestinationStopName = 6;
-  map<int32,Direction> Directions = 7;
+  string city = 7;
+  map<int32,Direction> Directions = 8;
 }
 
 message Direction{

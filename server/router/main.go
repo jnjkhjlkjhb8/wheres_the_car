@@ -209,6 +209,25 @@ func (s *Bike_Server) bike_eta(in *pb.BikeRequest, stream pb.Bike_Service_EtaSer
 		}
 	}
 }
+func (s *Bike_Server) tra_li(in *pb.BikeRequest, stream pb.Bike_Service_EtaServer) error {
+	log.Printf("call bike_eta %s", in.StationUID)
+	sub := s.rc.Subscribe(fmt.Sprintf("bike_availability:%s", in.StationUID))
+	defer sub.Close()
+	for {
+		val, err := sub.ReceiveMessage()
+		if err != nil {
+			log.Printf("[gRPC] action=bike_eta event=query_failed error=%v", err)
+			return err
+		}
+		resp := &pb.Resp_BikeEta{
+			Data: []byte(val.Payload),
+		}
+		if err := stream.Send(resp); err != nil {
+			log.Printf("[gRPC] action=bike_eta event=send_failed error=%v", err)
+			return err
+		}
+	}
+}
 func makethatsame(subRouteUID string) string {
 	if subRouteUID[0:2] == "THB" {
 		temp := subRouteUID[len(subRouteUID)-2:]

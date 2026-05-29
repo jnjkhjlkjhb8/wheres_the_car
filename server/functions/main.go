@@ -6,19 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	r := cron.New(cron.WithSeconds())
+	//r := cron.New(cron.WithSeconds())
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
@@ -45,13 +42,15 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	_, _ = r.AddFunc("0 0 3 * * *", func() {
+	changetovector(context.Background(), rc, db)
+	/*_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
 		busStatic(ctx, c, rc, db)
 		bikeStatic(ctx, c, rc, db)
 		mrtStatic(ctx, c, rc, db)
 		railStatic(ctx, c, rc, db)
+		changetovector(ctx,rc,db)
 		log.Println("[crontab] action=daily event=end")
 	})
 	_, _ = r.AddFunc("@every 2m", func() {
@@ -84,7 +83,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Println("在關了，沒看到嗎？")
+	log.Println("在關了，沒看到嗎？")*/
 }
 
 func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*json.Decoder, bool, error, func()) {
@@ -226,7 +225,7 @@ func makethatsame(city string, subRouteUID string, Direction uint8) (string, uin
 		} else if temp == "02" {
 			return subRouteUID[:len(subRouteUID)-2], 1
 		}
-		return subRouteUID[:len(subRouteUID)-2], Direction
+		return subRouteUID[:len(subRouteUID)-1], Direction
 	}
 	return subRouteUID, Direction
 }
@@ -326,9 +325,9 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				if dest == "" {
 					dest = r.DestinationStopNameZh
 				}
-				uid, _ := makethatsame(city, sub.SubRouteUID, sub.Direction)
+				uid, dir := makethatsame(city, sub.SubRouteUID, sub.Direction)
 				rawRows = append(rawRows, []interface{}{
-					uid, r.RouteUID, r.RouteName.Zhtw, sub.SubRouteName.Zhtw, dep, dest, api, raw,
+					uid, dir, r.RouteUID, r.RouteName.Zhtw, sub.SubRouteName.Zhtw, dep, dest, api, raw,
 				})
 			}
 		case "StopOfRoute":
@@ -337,9 +336,9 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			if err != nil {
 				fmt.Println(err.Error())
 			}
-			uid, _ := makethatsame(city, s.SubRouteUID, s.Direction)
+			uid, dir := makethatsame(city, s.SubRouteUID, s.Direction)
 			rawRows = append(rawRows, []interface{}{
-				uid, s.RouteUID, "", "", "", city, api, raw,
+				uid, dir, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Shape":
 			var s rawBusShape
@@ -347,9 +346,15 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			if err != nil {
 				fmt.Println(err.Error())
 			}
-			uid, _ := makethatsame(city, s.SubRouteUID, s.Direction)
+			var uid string
+			var dir uint8
+			if s.SubRouteUID == "" {
+				uid, dir = makethatsame(city, s.RouteUID, s.Direction)
+			} else {
+				uid, dir = makethatsame(city, s.SubRouteUID, s.Direction)
+			}
 			rawRows = append(rawRows, []interface{}{
-				uid, s.RouteUID, "", "", "", city, api, raw,
+				uid, dir, s.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Schedule":
 			var t rawBusSchedule
@@ -359,7 +364,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			}
 			uid, dir := makethatsame(city, t.SubRouteUID, t.Direction)
 			rawRows = append(rawRows, []interface{}{
-				uid, t.RouteUID, fmt.Sprintf("%d", dir), "", "", city, api, raw,
+				uid, dir, t.RouteUID, "", "", "", city, api, raw,
 			})
 		case "Station":
 			var t rawBusStation
@@ -368,16 +373,58 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				fmt.Println(err.Error())
 			}
 			rawRows = append(rawRows, []interface{}{
-				t.StationUID, t.StationID, t.StationName.Zhtw, "", city, "", api, raw,
+				t.StationUID, -1, t.StationID, t.StationName.Zhtw, "", city, "", api, raw,
 			})
 		}
 	}
 	if len(rawRows) > 0 {
-		from, err := db.CopyFrom(ctx, pgx.Identifier{"raw_bus_route"}, []string{"sub_route_uid", "route_uid", "route_name", "sub_route_name", "depart", "destin", "type", "content"}, pgx.CopyFromRows(rawRows))
+		c1 := `CREATE TEMP TABLE temp_bus (
+							sub_route_uid  text  not null,
+							direction      smallint not null,
+							route_uid      text  not null,
+							route_name     text,
+							sub_route_name text,
+							depart         text,
+							destin         text,
+							type           text  not null,
+							content        jsonb not null
+				) ON COMMIT DROP;`
+		c2 := `INSERT INTO raw_bus_route (
+							sub_route_uid,
+							direction,
+							route_uid,
+							route_name,
+							sub_route_name,
+							depart,
+							destin,
+							type,
+							content,
+							created_at
+						)
+						SELECT sub_route_uid, direction, route_uid, route_name,sub_route_name, depart,destin,type,content,NOW()l FROM temp_bus
+						ON CONFLICT (sub_route_uid,direction,type) DO UPDATE SET route_uid = EXCLUDED.route_uid,route_name = excluded.route_name,sub_route_name = EXCLUDED.sub_route_name,depart = excluded.depart,destin = excluded.destin,type = excluded.type,content = excluded.content,created_at = NOW();`
+		b, err := db.Begin(ctx)
 		if err != nil {
-			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_error error=%v rows=%d", city, api, err, from)
+			log.Printf("[MRT] action=process_static city=%s api= %s event=begin_error error=%v", city, api, err)
+			return
+		}
+		defer func(b pgx.Tx, ctx context.Context) {
+			_ = b.Rollback(ctx)
+		}(b, ctx)
+		_, _ = b.Exec(ctx, c1)
+		from, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"sub_route_uid", "direction", "route_uid", "route_name", "sub_route_name", "depart", "destin", "type", "content"}, pgx.CopyFromRows(rawRows))
+		if err == nil {
+			if _, execErr := b.Exec(ctx, c2); execErr != nil {
+				log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=exec_error error=%v", city, api, execErr)
+			}
+			if commitErr := b.Commit(ctx); commitErr != nil {
+				log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=commit_error error=%v", city, api, commitErr)
+			} else {
+				log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=success station_count=%d", city, api, from)
+			}
 		} else {
-			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_success rows=%d", city, api, from)
+			log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=copyfrom_error error=%v", city, api, err)
+			_ = b.Rollback(ctx)
 		}
 	}
 }
