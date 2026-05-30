@@ -12,8 +12,72 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jnjkhjlkjhb8/bus/models"
+	"google.golang.org/protobuf/proto"
 )
 
+type Tratimetable struct {
+	train_date            string `db:"train_date"`
+	trainno               string `db:"trainno"`
+	Starting_station_id   string `db:"starting_station_id"`
+	Starting_station_name string `db:"starting_station_name"`
+	Ending_station_id     string `db:"ending_station_id"`
+	Ending_station_name   string `db:"ending_station_name"`
+	Train_type_id         string `db:"train_type_id"`
+	Train_type_code       string `db:"train_type_code"`
+	Train_type_name       string `db:"train_type_name"`
+	Tripline              int32  `db:"tripline"`
+	Stopsequence          int    `db:"stop_sequence"`
+	Stationid             string `db:"stationid"`
+	Stationname           string `db:"stationname"`
+	Arrivaltime           string `db:"arrival_time"`
+	Departuretime         string `db:"departure_time"`
+	Mask                  int32  `db:"mask"`
+	Note                  string `db:"note"`
+}
+type Thsrtimetable struct {
+	train_date            string `db:"train_date"`
+	trainno               string `db:"trainno"`
+	Starting_station_id   string `db:"starting_station_id"`
+	Starting_station_name string `db:"starting_station_name"`
+	Ending_station_id     string `db:"ending_station_id"`
+	Ending_station_name   string `db:"ending_station_name"`
+	Stopsequence          int    `db:"stop_sequence"`
+	Stationid             string `db:"stationid"`
+	Stationname           string `db:"stationname"`
+	Arrivaltime           string `db:"arrival_time"`
+	Departuretime         string `db:"departure_time"`
+	Note                  string `db:"note"`
+}
+type TraStops struct {
+	Stopsequence  int    `db:"stop_sequence"`
+	Stationid     string `db:"stationid"`
+	Stationname   string `db:"stationname"`
+	Arrivaltime   string `db:"arrival_time"`
+	Departuretime string `db:"departure_time"`
+	Mask          int32  `db:"mask"`
+}
+type ThsrStops struct {
+	Stopsequence  int    `db:"stop_sequence"`
+	Stationid     string `db:"stationid"`
+	Stationname   string `db:"stationname"`
+	Arrivaltime   string `db:"arrival_time"`
+	Departuretime string `db:"departure_time"`
+}
+type trafare struct {
+	origin_station_id      string `db:"origin_station_id"`
+	destination_station_id string `db:"destination_station_id"`
+	ticket_id              string `db:"ticket_id"`
+	price                  int32  `db:"price"`
+}
+type thsrfare struct {
+	origin_station_id      string `db:"origin_station_id"`
+	destination_station_id string `db:"destination_station_id"`
+	ticket_id              uint8  `db:"ticket_id"`
+	fare_class             uint8  `db:"fare_class"`
+	cabin_class            uint8  `db:"cabin_class"`
+	price                  int32  `db:"price"`
+}
 type raw_tra_timetable struct {
 	TrainDate      string `json:"TrainDate"`
 	DailyTrainInfo struct {
@@ -84,6 +148,242 @@ type raw_thsr_timetable struct {
 	} `json:"StopTimes"`
 }
 
+func tra_price(start, end string, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	arr := []*models.TraFareItem{}
+	rows, _ := db.Query(ctx, `SELECT ticket_type,price FROM tra_fares WHERE origin_station_id = $1 AND destination_station_id = $2;`, start, end)
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[trafare])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		arr = append(arr, &models.TraFareItem{
+			TicketType: temp.ticket_id,
+			Price:      temp.price,
+		})
+	}
+	bytes, _ := proto.Marshal(&models.TraFareItem{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("TRA_Fare:%s:%s", start, end), bytes, 8*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
+func thsr_price(start, end string, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	arr := []*models.ThsaFare{}
+	rows, _ := db.Query(ctx, `SELECT ticket_type, fare_class,fare_class,price FROM thsr_fares WHERE origin_station_id = $1 AND destination_station_id = $2;`, start, end)
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[thsrfare])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		arr = append(arr, &models.ThsaFare{
+			CabinClas:  int32(temp.cabin_class),
+			TicketType: int32(temp.ticket_id),
+			FareClass:  int32(temp.fare_class),
+			Price:      temp.price,
+		})
+	}
+	bytes, _ := proto.Marshal(&models.ThsaFare{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("THSR_Fare:%s:%s", start, end), bytes, 1*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
+func tra_stoptimes(trainno string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	arr := []*models.TraStoptime{}
+	rows, _ := db.Query(ctx, `SELECT stopsequence, stationid,stationname,arrivaltime,departuretime,mask FROM tra_timetable WHERE trainno = $1 AND updated_at >= $2 AND updated_at <= $2;`, trainno, date)
+	if rows == nil {
+		get_tra_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
+		rows, _ = db.Query(ctx, `SELECT stopsequence, stationid,stationname,arrivaltime,departuretime,mask FROM tra_timetable WHERE trainno = $1 AND updated_at >= $2 AND updated_at <= $2;`, trainno, date)
+	}
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[TraStops])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		arr = append(arr, &models.TraStoptime{
+			StopSequence:  int32(temp.Stopsequence),
+			StationId:     temp.Stationid,
+			StationName:   temp.Stationname,
+			ArrivalTime:   temp.Arrivaltime,
+			DepartureTime: temp.Departuretime,
+			SuspendedFlag: (temp.Mask & (1 << 7)) != 0,
+		})
+	}
+	bytes, _ := proto.Marshal(&models.TraStoptimes{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("TRA_Stoptimes:%s:%s", date.Format(time.DateOnly), trainno), bytes, 1*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
+func thsr_stoptimes(trainno string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	arr := []*models.ThsaStoptime{}
+	rows, _ := db.Query(ctx, `SELECT stopsequence, stationid,stationname,arrivaltime,departuretime FROM thsr_timetable WHERE trainno = $1 AND updated_at >= $2 AND updated_at <= $2;`, trainno, date)
+	if rows == nil {
+		get_thsr_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
+		rows, _ = db.Query(ctx, `SELECT stopsequence, stationid,stationname,arrivaltime,departuretime FROM thsr_timetable WHERE trainno = $1 AND updated_at >= $2 AND updated_at <= $2;`, trainno, date)
+	}
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[ThsrStops])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		arr = append(arr, &models.ThsaStoptime{
+			StopSequence:  int32(temp.Stopsequence),
+			StationId:     temp.Stationid,
+			StationName:   temp.Stationname,
+			ArrivalTime:   temp.Arrivaltime,
+			DepartureTime: temp.Departuretime,
+		})
+	}
+	bytes, _ := proto.Marshal(&models.ThsrStoptimes{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("THSR_Stoptimes:%s:%s", date.Format(time.DateOnly), trainno), bytes, 1*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
+func tra_timetable(start, end string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	mp := make(map[string]*models.TraTimetable)
+	arr := []*models.TraTimetable{}
+	rows, _ := db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,train_type_id,train_type_code,train_type_name,tripline,arrivaltime,mask,note FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	if rows == nil {
+		get_tra_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
+		rows, _ = db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,train_type_id,train_type_code,train_type_name,tripline,arrivaltime,mask,note FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	}
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Tratimetable])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		mp[temp.trainno] = &models.TraTimetable{
+			TrainDate:             temp.train_date,
+			TrainNo:               temp.trainno,
+			Starting_Station_Name: temp.Starting_station_name,
+			Ending_Station_Name:   temp.Ending_station_name,
+			TrainTypeCode:         temp.Train_type_code,
+			TrainTypeName:         temp.Train_type_name,
+			TrainTypeID:           temp.Train_type_id,
+			TripLine:              temp.Tripline,
+			Mask:                  temp.Mask,
+			Note:                  temp.Note,
+			Starting_Time:         temp.Arrivaltime,
+		}
+	}
+	rows, _ = db.Query(ctx, `SELECT trainno,stationid FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	defer rows.Close()
+	row, err = pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Tratimetable])
+	if err != nil {
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		w, err := time.Parse(mp[temp.trainno].Starting_Time, time.TimeOnly)
+		if err != nil {
+			log.Printf("parse time error: %v", err)
+			continue
+		}
+		t, err := time.Parse(temp.Arrivaltime, time.TimeOnly)
+		if err != nil {
+			log.Printf("parse time error: %v", err)
+			continue
+		}
+		mp[temp.trainno] = &models.TraTimetable{
+			Ending_Time: temp.Arrivaltime,
+			Travel_Time: t.Sub(w).String(),
+		}
+		arr = append(arr, mp[temp.trainno])
+	}
+	bytes, _ := proto.Marshal(&models.TraTimetables{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("TRA_timetable:%s:%s:%s", date.Format(time.DateOnly), start, end), bytes, 1*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
+func thsr_timetable(start, end string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
+	mp := make(map[string]*models.ThsaTimetable)
+	arr := []*models.ThsaTimetable{}
+	rows, _ := db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,arrivaltime,note FROM thsr_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	if rows == nil {
+		get_thsr_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
+		rows, _ = db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,arrivaltime,note FROM thsr_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	}
+	defer rows.Close()
+	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Thsrtimetable])
+	if err != nil {
+		rows.Close()
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		mp[temp.trainno] = &models.ThsaTimetable{
+			TrainDate:             temp.train_date,
+			TrainNo:               temp.trainno,
+			Starting_Station_Name: temp.Starting_station_name,
+			EndingStationName:     temp.Ending_station_name,
+			Note:                  temp.Note,
+			Starting_Time:         temp.Arrivaltime,
+		}
+	}
+	rows, _ = db.Query(ctx, `SELECT trainno,arrivaltime FROM thsr_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	defer rows.Close()
+	row, err = pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Thsrtimetable])
+	if err != nil {
+		log.Println(err.Error())
+	}
+	for _, temp := range row {
+		w, err := time.Parse(mp[temp.trainno].Starting_Time, time.TimeOnly)
+		if err != nil {
+			log.Printf("parse time error: %v", err)
+			continue
+		}
+		t, err := time.Parse(temp.Arrivaltime, time.TimeOnly)
+		if err != nil {
+			log.Printf("parse time error: %v", err)
+			continue
+		}
+		mp[temp.trainno] = &models.ThsaTimetable{
+			Ending_Time: temp.Arrivaltime,
+			Travel_Time: t.Sub(w).String(),
+		}
+		arr = append(arr, mp[temp.trainno])
+	}
+	bytes, _ := proto.Marshal(&models.ThsrTimetables{})
+	if err != nil {
+		log.Printf("proto marshal error: %v", err)
+	} else {
+		err = rc.Set(fmt.Sprintf("TRA_timetable:%s:%s:%s", date.Format(time.DateOnly), start, end), bytes, 1*time.Hour).Err()
+		if err != nil {
+			log.Printf("redis set error: %v", err)
+		}
+	}
+}
 func get_tra_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Client, rc *redis.Client, Date string) {
 	log.Printf("[RAIL] action=tra_timetable event=start")
 	dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/TRA/DailyTimetable/TrainDate/%s", Date), "tra_traindate")

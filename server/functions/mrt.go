@@ -241,14 +241,18 @@ func mrtEta(client *resty.Client, rc *redis.Client) {
 	for _, system := range systems {
 		log.Printf("[MRT_ETA] action=mrt_eta system=%s event=system_start", system)
 		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/Metro/LiveBoard/%s", system), "mrt_LiveBoard"+system)
-		if err != nil || !comp {
+		if !comp {
+			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=skip reason=no updated", system)
+			continue
+		}
+		if err != nil {
 			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=skip reason=api_error", system)
-			return
+			continue
 		}
 		if _, err := dec.Token(); err != nil {
 			flipopen()
 			log.Printf("[MRT_ETA] action=mrt_eta system=%s event=decode_error error=%v", system, err)
-			return
+			continue
 		}
 		func() {
 			defer flipopen()

@@ -18,40 +18,34 @@ import (
 
 type BusSubroutes struct {
 	SubRouteUid  string `db:"sub_route_uid"`
-	RouteUid     string `db:"route_uid"`
-	Direction    uint8  `db:"direction"`
 	SubRouteName string `db:"sub_route_name"`
 	City         string `db:"city"`
 	Departure    string `db:"depart"`
 	Destination  string `db:"destin"`
-	Stop         string `db:"stops"`
 }
 type BusStationData struct {
 	StationUid  string `db:"station_uid"`
 	StationName string `db:"station_name"`
 	City        string `db:"city"`
-	Geom        string `db:"position"`
+	Geom        string `db:"st_astext"`
 }
 type BikeStationData struct {
 	StationUid  string `db:"station_uid"`
-	StationId   string `db:"station_id"`
 	StationName string `db:"name"`
 	City        string `db:"city"`
-	Position    string `db:"geom"`
+	Position    string `db:"st_astext"`
 }
 type MrtStationData struct {
-	Position  string `db:"stationposition"`
+	Position  string `db:"st_astext"`
 	System    string `db:"system"`
 	Name      string `db:"name"`
-	City      string `db:"city"`
 	StationId string `db:"station_id"`
 }
 type RailStationData struct {
-	Rail      string
 	StationId string `db:"station_id"`
 	Name      string `db:"name"`
 	City      string `db:"city"`
-	Geom      string `db:"geom"`
+	Geom      string `db:"st_astext"`
 }
 type resp struct {
 	Type         string
@@ -67,7 +61,7 @@ type Request struct {
 	Inputs []string `json:"inputs"`
 }
 
-const size = 16
+const size = 1024
 
 func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 	since, _ := rc.Get("LastTimeUpdate").Result()
@@ -81,22 +75,19 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 			var inrow []resp
 			switch table {
 			case "bus_subroutes":
-				rows, _ := db.Query(ctx, `SELECT sub_route_uid, route_uid, direction, sub_route_name,city,depart,destin,stops FROM bus_subroutes WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT sub_route_uid, sub_route_name,city,depart,destin FROM bus_static WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BusSubroutes])
 				if err != nil {
 					log.Println(err.Error())
 				}
 				for _, temp := range row {
-					text := fmt.Sprintf("類型：公車路線 子路線UID：%s 路線UID：%s 行駛方向：%d 路線名：%s 縣市：%s 起點站：%s 終點站：%s 經過站點：%s",
+					text := fmt.Sprintf("類型：公車路線 子路線UID：%s 路線名：%s 縣市：%s 起點站：%s 終點站：%s ",
 						temp.SubRouteUid,
-						temp.RouteUid,
-						temp.Direction,
 						temp.SubRouteName,
 						temp.City,
 						temp.Departure,
 						temp.Destination,
-						temp.Stop,
 					)
 					input = append(input, text)
 					inrow = append(inrow, resp{
@@ -109,7 +100,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					})
 				}
 			case "bus_stations":
-				rows, _ := db.Query(ctx, `SELECT station_uid, station_name, city, position FROM bus_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (station_name) station_uid, station_name, city, ST_AsText(position) FROM bus_stations WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BusStationData])
 				if err != nil {
@@ -132,7 +123,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					})
 				}
 			case "bike_stations":
-				rows, _ := db.Query(ctx, `SELECT station_uid, name, city, geom FROM bike_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT station_uid, name, city, ST_AsText(geom) FROM bike_stations WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BikeStationData])
 				if err != nil {
@@ -155,7 +146,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					})
 				}
 			case "mrt_station":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, system, stationposition FROM mrt_station WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT station_id, name, system, ST_AsText(stationposition) FROM mrt_station WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[MrtStationData])
 				if err != nil {
@@ -178,7 +169,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					})
 				}
 			case "thsr_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, geom FROM thsr_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM thsr_stations WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[RailStationData])
 				if err != nil {
@@ -201,7 +192,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					})
 				}
 			case "tra_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, geom FROM tra_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM tra_stations WHERE updated_at >= $1;`, since)
 				defer rows.Close()
 				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[RailStationData])
 				if err != nil {
@@ -244,7 +235,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 				}
 				flipopen()
 				b := &pgx.Batch{}
-				c1 := `INSERT INTO serach_vector(
+				c1 := `INSERT INTO search_vector(
 					type,
 					uid,
 					name,
@@ -255,7 +246,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					blob,
 					updated_at
 				)
-				VALUES ($1, $2, $3, $4, $5, $6,$7,$8)
+				VALUES ($1, $2, $3, $4, $5, $6,CASE WHEN $7 = '' THEN NULL ELSE ST_GeomFromText($7, 4326) END,$8,NOW())
 				ON CONFLICT (type,uid,city)
 				DO UPDATE SET name = EXCLUDED.name,
 					depart = EXCLUDED.depart,

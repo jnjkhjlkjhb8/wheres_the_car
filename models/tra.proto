@@ -2,18 +2,25 @@ syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 service TRA_station_service{
   rpc live_board(ask_staiton) returns (stream Resp_tra_live_board) {}
-  rpc timetable(ask_staiton) returns (tra_timetable) {}
 }
 service TRA_timetable_service{
   rpc timetable(ask_route) returns (tra_timetable) {}
   rpc fare(ask_staiton) returns (TraFareItem) {}
   rpc delay(ask_route) returns (stream Resp_tra_delay) {}
 }
+service TRA_Detain_service{
+  rpc stops(ask_detain) returns (tra_stoptimes) {}
+  rpc delay(ask_detain) returns (stream Resp_tra_delay) {}
+}
 message Resp_tra_live_board{
   bytes data = 1;
 }
 message Resp_tra_delay{
   bytes data = 1;
+}
+message ask_detain{
+  string date = 1;
+  string trainno = 2;
 }
 message ask_route{
   string date = 1;
@@ -30,6 +37,15 @@ message TraFareItem {
   string ticket_type = 3;
   int32 price = 4;
 }
+message tra_timetables{
+  repeated tra_timetable items = 1;
+}
+message tra_stoptimes{
+  repeated tra_stoptime items = 1;
+}
+message tra_delays {
+  map<string, int32> delay = 1;
+}
 message tra_stoptime{
   int32 stop_sequence = 3;
   string station_id = 1;
@@ -42,22 +58,17 @@ message tra_timetable{
   string TrainDate = 1;
   string TrainNo = 2;
   int32 Direction = 3;
-  string Starting_Station_ID = 4;
-  string Starting_Station_Name = 5;
+  string Starting_Station_Name = 4;
+  string Ending_Station_Name = 5;
   string TrainTypeID = 6;
   string TrainTypeCode = 7;
   string TrainTypeName = 8;
   int32 TripLine = 9;
-  bool WheelchairFlag = 10;
-  bool PackageServiceFlag = 11;
-  bool DiningFlag = 12;
-  bool BikeFlag = 13;
-  bool BreastFeedingFlag = 14;
-  bool DailyFlag = 15;
-  bool ServiceAddedFlag = 16;
-  bool SuspendedFlag = 17;
-  string Note = 18;
-  repeated tra_stoptime stoptimes = 19;
+  int32 mask = 10;
+  string Note = 11;
+  string Starting_Time = 12;
+  string Ending_Time = 13;
+  string Travel_Time = 14;
 }
 message tra_delay{
   string train_no = 1;

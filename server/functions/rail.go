@@ -356,20 +356,27 @@ func traEta(client *resty.Client, rc *redis.Client) {
 		func() {
 			defer flipopen()
 			if _, err := dec.Token(); err == nil {
-				delayCount := 0
+				data := &models.TraDelays{
+					Delay: make(map[string]int32),
+				}
+				count := 0
 				pipe := rc.Pipeline()
 				for dec.More() {
 					var temp TraDelay
 					if err := dec.Decode(&temp); err == nil {
-						delayCount++
+						count++
+						data.Delay[temp.TrainNo] = int32(temp.DelayTime)
 						pipe.HSet("tra:delay", temp.TrainNo, temp.DelayTime)
 					}
 				}
+				bytes, _ := proto.Marshal(data)
+				pipe.Set("tra:delay_all", bytes, 3*time.Minute)
+				pipe.Expire("tra:delay", 3*time.Minute)
 				_, pipErr := pipe.Exec()
 				if pipErr != nil {
 					log.Printf("[TRA_ETA] action=tra_eta event=delay_redis_error error=%v", pipErr)
 				} else {
-					log.Printf("[TRA_ETA] action=tra_eta event=delay_redis_success count=%d", delayCount)
+					log.Printf("[TRA_ETA] action=tra_eta event=delay_redis_success count=%d", count)
 				}
 			}
 		}()

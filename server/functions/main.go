@@ -6,16 +6,19 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
-	//r := cron.New(cron.WithSeconds())
+	r := cron.New(cron.WithSeconds())
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
@@ -42,15 +45,14 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	changetovector(context.Background(), rc, db)
-	/*_, _ = r.AddFunc("0 0 3 * * *", func() {
+	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
 		busStatic(ctx, c, rc, db)
 		bikeStatic(ctx, c, rc, db)
 		mrtStatic(ctx, c, rc, db)
 		railStatic(ctx, c, rc, db)
-		changetovector(ctx,rc,db)
+		changetovector(ctx, rc, db)
 		log.Println("[crontab] action=daily event=end")
 	})
 	_, _ = r.AddFunc("@every 2m", func() {
@@ -83,7 +85,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Println("在關了，沒看到嗎？")*/
+	log.Println("在關了，沒看到嗎？")
 }
 
 func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*json.Decoder, bool, error, func()) {

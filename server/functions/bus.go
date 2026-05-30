@@ -707,9 +707,9 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			} else {
 				status = 67
 			}
-			if eta.NextBusTime == "" {
+			/*if eta.NextBusTime == "" {
 				err = db.QueryRow(ctx, `SELECT ("arrival_time/StartTime" AT TIME ZONE 'Asia/Taipei')::time from bus_schedule WHERE sub_route_uid = $1 AND direction = $2 AND "arrival_time/StartTime" >= CURRENT_TIME ORDER BY "arrival_time/StartTime" ASC LIMIT 1;`, eta.SubRouteUID, eta.Direction).Scan(&eta.NextBusTime)
-			}
+			}*/
 			if _, ok = stations[b.StationName]; !ok {
 				stations[b.StationName] = &models.Bus_StationArrival{
 					StationName: b.StationName,

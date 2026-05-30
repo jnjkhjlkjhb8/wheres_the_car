@@ -143,7 +143,11 @@ func bikeEta(client *resty.Client, rc *redis.Client) {
 		}
 		log.Printf("[BIKE_ETA] action=bike_eta city=%s event=city_start", city)
 		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Bike/Availability/City/%s", city), "bike_availability"+city)
-		if err != nil || !comp {
+		if !comp {
+			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=no updated", city)
+			continue
+		}
+		if err != nil {
 			log.Printf("[BIKE_ETA] action=bike_eta city=%s event=skip reason=api_error,error=%s", city, err)
 			continue
 		}

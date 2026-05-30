@@ -2,7 +2,23 @@ syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 service Thsr_timetable_service{
   rpc fare(Ask_Thsr) returns (thsa_fare) {}
-  rpc timetable(Ask_Thsr) returns (thsa_timetable) {}
+  rpc timetable(Ask_Thsr) returns (thsr_timetables) {}
+}
+service Thsr_Detain_service{
+  rpc stops(thsr_ask_detain) returns (thsr_stoptimes) {}
+}
+message thsr_ask_detain{
+  string date = 1;
+  string trainno = 2;
+}
+message thsr_timetables{
+  repeated thsa_timetable items = 1;
+}
+message thsr_stoptimes{
+  repeated thsa_stoptime items = 1;
+}
+message Resp_Data{
+  bytes data = 1;
 }
 message Ask_Thsr{
   string date = 1;
@@ -12,8 +28,10 @@ message Ask_Thsr{
 message thsa_fare {
   string origin_station_id = 1;
   string destination_station_id = 2;
-  string ticket_type = 3;
-  int32 price = 4;
+  int32 ticket_type = 3;
+  int32 fare_class = 4;
+  int32 cabin_clas = 5;
+  int32 price = 6;
 }
 message thsa_stoptime{
   int32 stop_sequence = 3;
@@ -31,5 +49,7 @@ message thsa_timetable{
   string EndingStationID = 6;
   string EndingStationName = 7;
   string Note = 8;
-  repeated thsa_stoptime stoptimes = 9;
+  string Starting_Time = 12;
+  string Ending_Time = 13;
+  string Travel_Time = 14;
 }
