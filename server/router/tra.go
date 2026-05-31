@@ -17,23 +17,23 @@ import (
 )
 
 type Tratimetable struct {
-	train_date            string `db:"train_date"`
-	trainno               string `db:"trainno"`
-	Starting_station_id   string `db:"starting_station_id"`
-	Starting_station_name string `db:"starting_station_name"`
-	Ending_station_id     string `db:"ending_station_id"`
-	Ending_station_name   string `db:"ending_station_name"`
-	Train_type_id         string `db:"train_type_id"`
-	Train_type_code       string `db:"train_type_code"`
-	Train_type_name       string `db:"train_type_name"`
-	Tripline              int32  `db:"tripline"`
-	Stopsequence          int    `db:"stop_sequence"`
-	Stationid             string `db:"stationid"`
-	Stationname           string `db:"stationname"`
-	Arrivaltime           string `db:"arrival_time"`
-	Departuretime         string `db:"departure_time"`
-	Mask                  int32  `db:"mask"`
-	Note                  string `db:"note"`
+	Train_date            time.Time `db:"train_date"`
+	Trainno               string    `db:"trainno"`
+	Starting_station_id   string    `db:"starting_station_id"`
+	Starting_station_name string    `db:"starting_station_name"`
+	Ending_station_id     string    `db:"ending_station_id"`
+	Ending_station_name   string    `db:"ending_station_name"`
+	Train_type_id         string    `db:"train_type_id"`
+	Train_type_code       string    `db:"train_type_code"`
+	Train_type_name       string    `db:"train_type_name"`
+	Tripline              int32     `db:"tripline"`
+	Stopsequence          int       `db:"stopsequence"`
+	Stationid             string    `db:"stationid"`
+	Stationname           string    `db:"stationname"`
+	Arrivaltime           time.Time `db:"arrivaltime"`
+	Departuretime         time.Time `db:"departuretime"`
+	Mask                  int32     `db:"mask"`
+	Note                  string    `db:"note"`
 }
 type Thsrtimetable struct {
 	train_date            string `db:"train_date"`
@@ -82,7 +82,7 @@ type raw_tra_timetable struct {
 	TrainDate      string `json:"TrainDate"`
 	DailyTrainInfo struct {
 		TrainNo             string `json:"TrainNo"`
-		Direction           bool   `json:"Direction"`
+		Direction           uint8  `json:"Direction"`
 		StartingStationID   string `json:"StartingStationID"`
 		StartingStationName struct {
 			ZhTw string `json:"Zh_tw"`
@@ -124,7 +124,7 @@ type raw_thsr_timetable struct {
 	TrainDate      string `json:"TrainDate"`
 	DailyTrainInfo struct {
 		TrainNo             string `json:"TrainNo"`
-		Direction           bool   `json:"Direction"`
+		Direction           uint8  `json:"Direction"`
 		StartingStationID   string `json:"StartingStationID"`
 		StartingStationName struct {
 			ZhTw string `json:"Zh_tw"`
@@ -268,21 +268,19 @@ func thsr_stoptimes(trainno string, date time.Time, ctx context.Context, client 
 func tra_timetable(start, end string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
 	mp := make(map[string]*models.TraTimetable)
 	arr := []*models.TraTimetable{}
-	rows, _ := db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,train_type_id,train_type_code,train_type_name,tripline,arrivaltime,mask,note FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
-	if rows == nil {
-		get_tra_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
-		rows, _ = db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,train_type_id,train_type_code,train_type_name,tripline,arrivaltime,mask,note FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
-	}
-	defer rows.Close()
+	rows, err := db.Query(ctx, `SELECT train_date,trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name, stopsequence,train_type_id,train_type_code,train_type_name,tripline,stationid,arrivaltime,stationname,mask,note,departuretime FROM tra_timetable WHERE stationid = $1 AND train_date = $2 AND arrivaltime >= $3;`, start, date.Format(time.DateOnly), date.Format(time.TimeOnly))
 	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Tratimetable])
-	if err != nil {
+	rows.Close()
+	if len(row) == 0 {
+		get_tra_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
+		rows, _ := db.Query(ctx, `SELECT train_date,trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name, stopsequence,train_type_id,train_type_code,train_type_name,tripline,stationid,arrivaltime,stationname,mask,note,departuretime FROM tra_timetable WHERE stationid = $1 AND train_date = $2 AND arrivaltime >= $3;`, start, date.Format(time.DateOnly), date.Format(time.TimeOnly))
+		row, err = pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Tratimetable])
 		rows.Close()
-		log.Println(err.Error())
 	}
 	for _, temp := range row {
-		mp[temp.trainno] = &models.TraTimetable{
-			TrainDate:             temp.train_date,
-			TrainNo:               temp.trainno,
+		mp[temp.Trainno] = &models.TraTimetable{
+			TrainDate:             temp.Train_date.Format(time.DateOnly),
+			TrainNo:               temp.Trainno,
 			Starting_Station_Name: temp.Starting_station_name,
 			Ending_Station_Name:   temp.Ending_station_name,
 			TrainTypeCode:         temp.Train_type_code,
@@ -291,35 +289,33 @@ func tra_timetable(start, end string, date time.Time, ctx context.Context, clien
 			TripLine:              temp.Tripline,
 			Mask:                  temp.Mask,
 			Note:                  temp.Note,
-			Starting_Time:         temp.Arrivaltime,
+			Starting_Time:         temp.Arrivaltime.Format(time.RFC3339),
 		}
 	}
-	rows, _ = db.Query(ctx, `SELECT trainno,stationid FROM tra_timetable WHERE stationid = $1 AND updated_at >= $2 AND updated_at <= $3;`, start, date, date.Add(18*time.Hour))
+	rows, _ = db.Query(ctx, `SELECT train_date,trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name, stopsequence,train_type_id,train_type_code,train_type_name,tripline,stationid,arrivaltime,stationname,mask,note,departuretime FROM tra_timetable WHERE stationid = $1 AND train_date = $2 AND arrivaltime >= $3;`, end, date.Format(time.DateOnly), date.Format(time.TimeOnly))
 	defer rows.Close()
 	row, err = pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[Tratimetable])
 	if err != nil {
 		log.Println(err.Error())
 	}
 	for _, temp := range row {
-		seed, ok := mp[temp.trainno]
+		seed, ok := mp[temp.Trainno]
 		if !ok {
 			continue
 		}
-		w, err := time.Parse(time.TimeOnly, seed.Starting_Time)
+		w, err := time.Parse(time.RFC3339, seed.Starting_Time)
 		if err != nil {
 			log.Printf("parse time error: %v", err)
 			continue
 		}
-		t, err := time.Parse(time.TimeOnly, temp.Arrivaltime)
-		if err != nil {
-			log.Printf("parse time error: %v", err)
-			continue
+		t := temp.Arrivaltime
+		duration := t.Sub(w)
+		if duration < 0 {
+			duration = -duration
 		}
-		mp[temp.trainno] = &models.TraTimetable{
-			Ending_Time: temp.Arrivaltime,
-			Travel_Time: t.Sub(w).String(),
-		}
-		arr = append(arr, mp[temp.trainno])
+		seed.Ending_Time = t.Format(time.RFC3339)
+		seed.Travel_Time = duration.String()
+		arr = append(arr, seed)
 	}
 	bytes, _ := proto.Marshal(&models.TraTimetables{Items: arr})
 	if err != nil {
@@ -409,6 +405,8 @@ func get_tra_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 		var temp raw_tra_timetable
 		if err := dec.Decode(&temp); err == nil {
 			for _, stop := range temp.StopTimes {
+				at, _ := time.Parse("15:04", stop.ArrivalTime)
+				dt, _ := time.Parse("15:04", stop.DepartureTime)
 				row = append(row, []interface{}{
 					temp.TrainDate,
 					temp.DailyTrainInfo.TrainNo,
@@ -421,10 +419,11 @@ func get_tra_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 					temp.DailyTrainInfo.TrainTypeCode,
 					temp.DailyTrainInfo.TrainTypeName.ZhTw,
 					temp.DailyTrainInfo.TripLine,
+					stop.StopSequence,
 					stop.StationID,
 					stop.StationName.ZhTw,
-					stop.ArrivalTime,
-					stop.DepartureTime,
+					at,
+					dt,
 					mask(temp.DailyTrainInfo.WheelchairFlag, temp.DailyTrainInfo.PackageServiceFlag, temp.DailyTrainInfo.DiningFlag, temp.DailyTrainInfo.BikeFlag, temp.DailyTrainInfo.BreastFeedingFlag, temp.DailyTrainInfo.DailyFlag, temp.DailyTrainInfo.ServiceAddedFlag, stop.SuspendedFlag),
 					temp.DailyTrainInfo.Note.ZhTw,
 				})

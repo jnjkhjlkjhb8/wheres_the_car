@@ -4,7 +4,7 @@ service TRA_station_service{
   rpc live_board(ask_staiton) returns (stream Resp_tra_live_board) {}
 }
 service TRA_timetable_service{
-  rpc timetable(ask_route) returns (tra_timetable) {}
+  rpc timetable(ask_route) returns (tra_timetables) {}
   rpc fare(ask_staiton) returns (TraFareItem) {}
   rpc delay(ask_route) returns (stream Resp_tra_delay) {}
 }

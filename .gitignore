@@ -52,3 +52,4 @@ android/app/build.gradle.kts
 android/app/src/main/AndroidManifest.xml
 server/router/server.go
 server/router/Dockerfile
+docs/spec/requirements.md

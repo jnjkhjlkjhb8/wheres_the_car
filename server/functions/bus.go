@@ -757,6 +757,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 		for uid, pb := range routes {
 			data, _ := proto.Marshal(pb)
 			pipe.Set(fmt.Sprintf("bus_eta_route:%s", uid), data, 180*time.Second)
+			pipe.Publish(fmt.Sprintf("bus_eta_route:%s", uid), data)
 		}
 		_, err = pipe.Exec()
 		if err != nil {

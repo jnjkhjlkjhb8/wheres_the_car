@@ -61,6 +61,9 @@ type osrm struct {
 func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpool.Pool) (*models.RespNear, error) {
 	r := []uint8{1, 2, 3, 4, 5}
 	res := models.RespNear{}
+	if size <= 0 {
+		size = 5
+	}
 	for _, i := range r {
 		switch i {
 		case 1:
@@ -95,7 +98,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1", c1))
+					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -151,7 +154,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1", c1))
+					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -201,7 +204,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1", c1))
+					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -251,7 +254,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1", c1))
+					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -301,7 +304,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1", c1))
+					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
