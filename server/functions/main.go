@@ -249,7 +249,7 @@ func connectdb() *pgxpool.Pool {
 	conn, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Printf("[DB] action=connect event=failed error=%v", err)
-		//panic(err)
+		panic(err)
 	}
 	err = conn.Ping(context.Background())
 	if err != nil {
@@ -403,7 +403,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 							content,
 							created_at
 						)
-						SELECT sub_route_uid, direction, route_uid, route_name,sub_route_name, depart,destin,type,content,NOW()l FROM temp_bus
+						SELECT sub_route_uid, direction, route_uid, route_name,sub_route_name, depart,destin,type,content,NOW() FROM temp_bus
 						ON CONFLICT (sub_route_uid,direction,type) DO UPDATE SET route_uid = EXCLUDED.route_uid,route_name = excluded.route_name,sub_route_name = EXCLUDED.sub_route_name,depart = excluded.depart,destin = excluded.destin,type = excluded.type,content = excluded.content,created_at = NOW();`
 		b, err := db.Begin(ctx)
 		if err != nil {

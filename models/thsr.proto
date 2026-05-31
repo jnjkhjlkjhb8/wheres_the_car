@@ -33,6 +33,9 @@ message thsa_fare {
   int32 cabin_clas = 5;
   int32 price = 6;
 }
+message thsa_fares {
+  repeated thsa_fare items = 1;
+}
 message thsa_stoptime{
   int32 stop_sequence = 3;
   string station_id = 1;

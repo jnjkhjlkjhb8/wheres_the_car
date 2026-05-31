@@ -699,6 +699,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			var status uint8
 			var est int32
 			var stime string
+			uid, _ := makethatsame(city, b.SubRouteUID, b.Direction)
 			if ok {
 				temp, _ := time.Parse(time.RFC3339, eta.SrcUpdateTime)
 				est = eta.EstimatedTime - int32(now.Sub(temp).Seconds())
@@ -730,7 +731,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 				NextBusTime:   eta.NextBusTime,
 				StopStatus:    int32(status),
 				SrcUpdateTime: stime,
-				Buses:         busmap[b.SubRouteUID],
+				Buses:         busmap[uid],
 			})
 			if _, ok = routes[b.SubRouteUID]; !ok {
 				routes[b.SubRouteUID] = &models.Bus_RouteArrival{
@@ -745,7 +746,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 				StopStatus:    int32(status),
 				NextBusTime:   eta.NextBusTime,
 				SrcUpdateTime: stime,
-				Buses:         busmap[b.SubRouteUID],
+				Buses:         busmap[uid],
 			})
 		}
 		pipe := rc.Pipeline()

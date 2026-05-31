@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -12,32 +15,33 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pb "github.com/jnjkhjlkjhb8/bus/models"
+	"google.golang.org/grpc"
 )
 
-type Bus_RouteServer struct {
+type BusRouteserver struct {
 	pb.UnimplementedBus_Route_ServiceServer
 	mu sync.Mutex
 	db *pgxpool.Pool
 	rc *redis.Client
 }
-type Bus_StationServer struct {
+type BusStationserver struct {
 	pb.UnimplementedBus_Station_ServiceServer
 	mu sync.Mutex
 	rc *redis.Client
 }
-type Bike_Server struct {
+type BikeServer struct {
 	pb.UnimplementedBike_ServiceServer
 	mu sync.Mutex
 	db *pgxpool.Pool
 	rc *redis.Client
 }
-type Mrt_Server struct {
+type MrtServer struct {
 	pb.UnimplementedMrt_ServiceServer
 	mu sync.Mutex
 	rc *redis.Client
 	db *pgxpool.Pool
 }
-type Thsr_server struct {
+type ThsrServer struct {
 	pb.UnimplementedThsrTimetableServiceServer
 	mu     sync.Mutex
 	db     *pgxpool.Pool
@@ -80,7 +84,9 @@ type Near_Server struct {
 func main() {
 	rc := connectredis()
 	db := connectdb()
-	defer rc.Close()
+	defer func(rc *redis.Client) {
+		_ = rc.Close()
+	}(rc)
 	defer db.Close()
 	c := resty.New()
 	defer func(rc *redis.Client) {
@@ -106,11 +112,36 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", "50051"))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterBus_Route_ServiceServer(grpcServer, &BusRouteserver{db: db, rc: rc})
+	pb.RegisterBus_Station_ServiceServer(grpcServer, &BusStationserver{rc: rc})
+	pb.RegisterBike_ServiceServer(grpcServer, &BikeServer{db: db, rc: rc})
+	pb.RegisterMrt_ServiceServer(grpcServer, &MrtServer{db: db, rc: rc})
+	pb.RegisterThsrTimetableServiceServer(grpcServer, &ThsrServer{db: db, client: c, rc: rc})
+	pb.RegisterTRAStationServiceServer(grpcServer, &Tra_StationServer{db: db, rc: rc})
+	pb.RegisterTRATimetableServiceServer(grpcServer, &Tra_TimetableServer{db: db, client: c, rc: rc})
+	pb.RegisterTRA_DetainServiceServer(grpcServer, &Tra_DetainServer{db: db, client: c, rc: rc})
+	pb.RegisterThsr_DetainServiceServer(grpcServer, &Thsr_DetainServer{db: db, client: c, rc: rc})
+	pb.RegisterNear_Station_ServiceServer(grpcServer, &Near_Server{db: db})
+	log.Printf("gRPC server is running on port %d", 50051)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+	err = grpcServer.Serve(lis)
+	if err != nil {
+		log.Fatalf("failed to serve: %v", err)
+		return
+	}
 }
-func (s *Bus_RouteServer) Bus_route_static(ctx context.Context, in *pb.Bus_Ask_Route) (*pb.Resp_BusStatic, error) {
+func (s *BusRouteserver) BusRouteStatic(ctx context.Context, in *pb.Bus_Ask_Route) (*pb.Resp_BusStatic, error) {
 	log.Printf("call bus_static %s", in.SubRouteUID)
 	route := makethatsame(in.SubRouteUID)
-	err := s.db.QueryRow(ctx, `SELECT pb FROM bus_static where sub_route_uid like '$1';`, route).Scan(&route)
+	err := s.db.QueryRow(ctx, `SELECT pb FROM bus_static where sub_route_uid like $1;`, route).Scan(&route)
 	if err != nil {
 		log.Printf("[gRPC] action=bus_static event=query_failed error=%v", err)
 		return nil, err
@@ -120,11 +151,13 @@ func (s *Bus_RouteServer) Bus_route_static(ctx context.Context, in *pb.Bus_Ask_R
 	}
 	return resp, nil
 }
-func (s *Bus_RouteServer) Bus_route_eta(ctx context.Context, in *pb.Bus_Ask_Route, stream pb.Bus_Route_Service_EtaServer) error {
+func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_Service_EtaServer) error {
 	log.Printf("call Bus_route_eta %s", in.SubRouteUID)
 	route := makethatsame(in.SubRouteUID)
 	sub := s.rc.Subscribe(fmt.Sprintf("bus_eta_route:%s", route))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -140,10 +173,12 @@ func (s *Bus_RouteServer) Bus_route_eta(ctx context.Context, in *pb.Bus_Ask_Rout
 		}
 	}
 }
-func (s *Bus_RouteServer) Bus_Station_eta(ctx context.Context, in *pb.Bus_Ask_Station, stream pb.Bus_Station_Service_EtaServer) error {
+func (s *BusRouteserver) BusStationEta(in *pb.Bus_Ask_Station, stream pb.Bus_Station_Service_EtaServer) error {
 	log.Printf("call Bus_station_eta %s", in.StationName)
 	sub := s.rc.Subscribe(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -159,7 +194,7 @@ func (s *Bus_RouteServer) Bus_Station_eta(ctx context.Context, in *pb.Bus_Ask_St
 		}
 	}
 }
-func (s *Bus_RouteServer) Bus_Dailytable(in *pb.Bus_Ask_Route) (*pb.Resp_BusEta, error) {
+func (s *BusRouteserver) BusDailytable(in *pb.Bus_Ask_Route) (*pb.Resp_BusEta, error) {
 	log.Printf("call Bus_route_eta %s", in.SubRouteUID)
 	route := makethatsame(in.SubRouteUID)
 	val, err := s.rc.Get(fmt.Sprintf("bus_dailytable:%s", route)).Result()
@@ -172,10 +207,12 @@ func (s *Bus_RouteServer) Bus_Dailytable(in *pb.Bus_Ask_Route) (*pb.Resp_BusEta,
 	}
 	return resp, nil
 }
-func (s *Mrt_Server) Mrt_eta(in *pb.AskMrt, stream pb.Mrt_Service_EtaServer) error {
+func (s *MrtServer) MrtEta(in *pb.AskMrt, stream pb.Mrt_Service_EtaServer) error {
 	log.Printf("call Mrt_eta %s %s", in.System, in.StationID)
 	sub := s.rc.Subscribe(fmt.Sprintf("mrt_live:%s:%s", in.System, in.StationID))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -191,11 +228,11 @@ func (s *Mrt_Server) Mrt_eta(in *pb.AskMrt, stream pb.Mrt_Service_EtaServer) err
 		}
 	}
 }
-func (s *Bike_Server) Bike_static(ctx context.Context, in *pb.BikeRequest) (*pb.BikeStatic, error) {
+func (s *BikeServer) BikeStatic(ctx context.Context, in *pb.BikeRequest) (*pb.BikeStatic, error) {
 	log.Printf("call bike_static %s", in.StationUID)
 	var name, address string
-	var capacity, service_type int32
-	err := s.db.QueryRow(ctx, `SELECT name,capacity,service_type,address FROM bike_stations where station_uid like '$1';`, in.StationUID).Scan(&name, &capacity, &service_type, &address)
+	var capacity, serviceType int32
+	err := s.db.QueryRow(ctx, `SELECT name,capacity,service_type,address FROM bike_stations where station_uid like $1;`, in.StationUID).Scan(&name, &capacity, &serviceType, &address)
 	if err != nil {
 		log.Printf("[gRPC] action=bike_static event=query_failed error=%v", err)
 		return nil, err
@@ -204,15 +241,17 @@ func (s *Bike_Server) Bike_static(ctx context.Context, in *pb.BikeRequest) (*pb.
 		StationUID:  in.StationUID,
 		Name:        name,
 		Capacity:    capacity,
-		ServiceType: service_type,
+		ServiceType: serviceType,
 		Address:     address,
 	}
 	return resp, nil
 }
-func (s *Bike_Server) bike_eta(in *pb.BikeRequest, stream pb.Bike_Service_EtaServer) error {
+func (s *BikeServer) bikeEta(in *pb.BikeRequest, stream pb.Bike_Service_EtaServer) error {
 	log.Printf("call bike_eta %s", in.StationUID)
 	sub := s.rc.Subscribe(fmt.Sprintf("bike_availability:%s", in.StationUID))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -228,10 +267,12 @@ func (s *Bike_Server) bike_eta(in *pb.BikeRequest, stream pb.Bike_Service_EtaSer
 		}
 	}
 }
-func (s *Tra_StationServer) tra_liveboard(in *pb.AskStaiton, stream pb.TRAStationService_LiveBoardServer) error {
+func (s *Tra_StationServer) traLiveboard(in *pb.AskStaiton, stream pb.TRAStationService_LiveBoardServer) error {
 	log.Printf("call tra_liveboard %s", in.StationId)
 	sub := s.rc.Subscribe(fmt.Sprintf("tra:liveboard:%s", in.StationId))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -247,10 +288,12 @@ func (s *Tra_StationServer) tra_liveboard(in *pb.AskStaiton, stream pb.TRAStatio
 		}
 	}
 }
-func (s *Tra_TimetableServer) tra_delay(stream pb.TRATimetableService_DelayServer) error {
+func (s *Tra_TimetableServer) traDelay(stream pb.TRATimetableService_DelayServer) error {
 	log.Printf("call tra_delay")
 	sub := s.rc.Subscribe("tra:delay:all")
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -266,10 +309,12 @@ func (s *Tra_TimetableServer) tra_delay(stream pb.TRATimetableService_DelayServe
 		}
 	}
 }
-func (s *Tra_DetainServer) tra_ddelay(in *pb.AskDetain, stream pb.TRA_DetainService_DelayServer) error {
+func (s *Tra_DetainServer) traDdelay(in *pb.AskDetain, stream pb.TRA_DetainService_DelayServer) error {
 	log.Printf("call tra_delay %s", in.Trainno)
 	sub := s.rc.Subscribe(fmt.Sprintf("tra:delay:%s", in.Trainno))
-	defer sub.Close()
+	defer func(sub *redis.PubSub) {
+		_ = sub.Close()
+	}(sub)
 	for {
 		val, err := sub.ReceiveMessage()
 		if err != nil {
@@ -285,10 +330,10 @@ func (s *Tra_DetainServer) tra_ddelay(in *pb.AskDetain, stream pb.TRA_DetainServ
 		}
 	}
 }
-func (s *Tra_TimetableServer) tra_fare(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *Tra_TimetableServer) traFare(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call tra fare")
 	val := s.rc.Get(fmt.Sprintf("TRA_Fare:%s:%s", in.OriginStationId, in.DestinationStationId))
-	if val == nil {
+	if errors.Is(val.Err(), redis.Nil) {
 		tra_price(in.OriginStationId, in.DestinationStationId, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("TRA_Fare:%s:%s", in.OriginStationId, in.DestinationStationId))
 	}
@@ -302,10 +347,10 @@ func (s *Tra_TimetableServer) tra_fare(in *pb.AskRoute, ctx context.Context) (*p
 	}
 	return resp, nil
 }
-func (s *Thsr_server) thsr_fare(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *ThsrServer) thsrFare(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call thsr fare")
 	val := s.rc.Get(fmt.Sprintf("THSR_Fare:%s:%s", in.OriginStationId, in.DestinationStationId))
-	if val == nil {
+	if errors.Is(val.Err(), redis.Nil) {
 		thsr_price(in.OriginStationId, in.DestinationStationId, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("THSR_Fare:%s:%s", in.OriginStationId, in.DestinationStationId))
 	}
@@ -319,11 +364,11 @@ func (s *Thsr_server) thsr_fare(in *pb.AskRoute, ctx context.Context) (*pb.Resp_
 	}
 	return resp, nil
 }
-func (s *Tra_TimetableServer) tra_timetable(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *Tra_TimetableServer) traTimetable(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call tra timetable %s %s", in.OriginStationId, in.DestinationStationId)
 	val := s.rc.Get(fmt.Sprintf("TRA_timetable:%s:%s:%s", in.Date, in.OriginStationId, in.DestinationStationId))
-	if val == nil {
-		t, _ := time.Parse(in.Date, time.RFC3339)
+	if errors.Is(val.Err(), redis.Nil) {
+		t, _ := time.Parse(time.RFC3339, in.Date)
 		tra_timetable(in.OriginStationId, in.DestinationStationId, t, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("TRA_timetable:%s:%s:%s", in.Date, in.OriginStationId, in.DestinationStationId))
 	}
@@ -337,11 +382,11 @@ func (s *Tra_TimetableServer) tra_timetable(in *pb.AskRoute, ctx context.Context
 	}
 	return resp, nil
 }
-func (s *Thsr_server) thsr_timetable(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *ThsrServer) thsrTimetable(in *pb.AskRoute, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call thsr timetable %s %s", in.OriginStationId, in.DestinationStationId)
 	val := s.rc.Get(fmt.Sprintf("THSR_timetable:%s:%s:%s", in.Date, in.OriginStationId, in.DestinationStationId))
-	if val == nil {
-		t, _ := time.Parse(in.Date, time.RFC3339)
+	if errors.Is(val.Err(), redis.Nil) {
+		t, _ := time.Parse(time.RFC3339, in.Date)
 		thsr_timetable(in.OriginStationId, in.DestinationStationId, t, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("THSR_timetable:%s:%s:%s", in.Date, in.OriginStationId, in.DestinationStationId))
 	}
@@ -355,11 +400,11 @@ func (s *Thsr_server) thsr_timetable(in *pb.AskRoute, ctx context.Context) (*pb.
 	}
 	return resp, nil
 }
-func (s *Tra_DetainServer) tra_stops(in *pb.AskDetain, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *Tra_DetainServer) traStops(in *pb.AskDetain, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call tra stops %s", in.Trainno)
 	val := s.rc.Get(fmt.Sprintf("TRA_Stoptimes:%s:%s", in.Date, in.Trainno))
-	if val == nil {
-		t, _ := time.Parse(in.Date, time.RFC3339)
+	if errors.Is(val.Err(), redis.Nil) {
+		t, _ := time.Parse(time.RFC3339, in.Date)
 		tra_stoptimes(in.Trainno, t, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("TRA_Stoptimes:%s:%s", in.Date, in.Trainno))
 	}
@@ -373,11 +418,11 @@ func (s *Tra_DetainServer) tra_stops(in *pb.AskDetain, ctx context.Context) (*pb
 	}
 	return resp, nil
 }
-func (s *Tra_DetainServer) thsr_stops(in *pb.AskDetain, ctx context.Context) (*pb.Resp_Data, error) {
+func (s *Tra_DetainServer) thsrStops(in *pb.ThsrAskDetain, ctx context.Context) (*pb.Resp_Data, error) {
 	log.Printf("call thsr stops %s", in.Trainno)
 	val := s.rc.Get(fmt.Sprintf("THSR_Stoptimes:%s:%s", in.Date, in.Trainno))
-	if val == nil {
-		t, _ := time.Parse(in.Date, time.RFC3339)
+	if errors.Is(val.Err(), redis.Nil) {
+		t, _ := time.Parse(time.RFC3339, in.Date)
 		thsr_stoptimes(in.Trainno, t, ctx, s.client, s.db, s.rc)
 		val = s.rc.Get(fmt.Sprintf("THSR_Stoptimes:%s:%s", in.Date, in.Trainno))
 	}
@@ -391,6 +436,35 @@ func (s *Tra_DetainServer) thsr_stops(in *pb.AskDetain, ctx context.Context) (*p
 	}
 	return resp, nil
 }
+func (s *Near_Server) FindNear(stream pb.Near_Station_Service_NearServer) error {
+	var l1, l2 float64
+	var l3 int
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		lon := in.PositionLon
+		lat := in.PositionLat
+		r := in.Radius
+		l1 = lon
+		l2 = lat
+		log.Printf("[gRPC]Received new location: Lon=%f, Lat=%f, Radius=%d", lon, lat, r)
+		resp, err := findnearstation(l1, l2, l3, context.Background(), s.db)
+		if err != nil {
+			log.Printf("[gRPC] action=findnearstation failed error=%v", err)
+			return err
+		}
+		if err := stream.Send(resp); err != nil {
+			log.Printf("[gRPC] action=send_newdata failed error=%v", err)
+			return err
+		}
+		log.Printf("[gRPC] action=send_newdata success")
+	}
+}
 func makethatsame(subRouteUID string) string {
 	if subRouteUID[0:2] == "THB" {
 		temp := subRouteUID[len(subRouteUID)-2:]
@@ -399,7 +473,7 @@ func makethatsame(subRouteUID string) string {
 		} else if temp == "02" {
 			return subRouteUID[:len(subRouteUID)-2]
 		}
-		return subRouteUID[:len(subRouteUID)-2]
+		return subRouteUID[:len(subRouteUID)-1]
 	}
 	return subRouteUID
 }

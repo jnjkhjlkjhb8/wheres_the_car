@@ -129,7 +129,7 @@ func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db 
 			row = append(row, []interface{}{
 				temp.StationID,
 				temp.StationName.ZhTw,
-				citymap2[temp.StationName.ZhTw],
+				citymap2[temp.LocationCityCode],
 				g,
 			})
 		}

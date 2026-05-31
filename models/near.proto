@@ -2,7 +2,7 @@ syntax = "proto3";
 option go_package = "github.com/jnjkhjlkjhb8/bus/models";
 
 service Near_Station_Service{
-  rpc near(stream Ask_Near) returns (stream NearStation) {}
+  rpc near(stream Ask_Near) returns (stream resp_near) {}
 }
 
 message Ask_Near{
@@ -10,12 +10,22 @@ message Ask_Near{
   double PositionLat = 2;
   int32 Radius = 3;
 }
-
+message resp_near {
+  map<string,array_near> near_bus_stations = 1;
+  repeated NearStation near_bike_stations = 2;
+  repeated NearStation near_mrt_stations = 3;
+  repeated NearStation near_tra_stations = 4;
+  repeated NearStation near_thsr_stations = 5;
+}
+message array_near{
+  repeated NearStation near_stations = 1;
+}
 message NearStation{
-  string StationID = 1;
-  string StationName = 2;
-  string city = 3;
-  double PositionLon = 4;
-  double PositionLat = 5;
-  int32 type = 6;
+  int32 type = 1;
+  string StationID = 2;
+  string StationName = 3;
+  string city = 4;
+  double PositionLon = 5;
+  double PositionLat = 6;
+  int32 walk = 7;
 }

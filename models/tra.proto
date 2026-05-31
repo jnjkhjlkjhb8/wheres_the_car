@@ -37,6 +37,9 @@ message TraFareItem {
   string ticket_type = 3;
   int32 price = 4;
 }
+message tra_fare_items {
+  repeated TraFareItem items = 1;
+}
 message tra_timetables{
   repeated tra_timetable items = 1;
 }

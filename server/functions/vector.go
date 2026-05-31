@@ -69,173 +69,24 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 		since = time.Time{}.Format(time.RFC3339)
 	}
 	tables := []string{"bus_subroutes", "bus_stations", "bike_stations", "mrt_station", "tra_stations", "thsr_stations"}
-	for _, table := range tables {
-		func() {
-			var input []string
-			var inrow []resp
-			switch table {
-			case "bus_subroutes":
-				rows, _ := db.Query(ctx, `SELECT sub_route_uid, sub_route_name,city,depart,destin FROM bus_static WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BusSubroutes])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：公車路線 子路線UID：%s 路線名：%s 縣市：%s 起點站：%s 終點站：%s ",
-						temp.SubRouteUid,
-						temp.SubRouteName,
-						temp.City,
-						temp.Departure,
-						temp.Destination,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type:         "bus_route",
-						UID:          temp.SubRouteUid,
-						Name:         temp.SubRouteName,
-						City:         temp.City,
-						DepartSystem: temp.Departure,
-						Destin:       temp.Destination,
-					})
-				}
-			case "bus_stations":
-				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (station_name) station_uid, station_name, city, ST_AsText(position) FROM bus_stations WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BusStationData])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：公車站牌 站點UID：%s 站點名稱：%s 縣市：%s 位置：%s",
-						temp.StationUid,
-						temp.StationName,
-						temp.City,
-						temp.Geom,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type: "bus_station",
-						UID:  temp.StationUid,
-						Name: temp.StationName,
-						City: temp.City,
-						Geom: temp.Geom,
-					})
-				}
-			case "bike_stations":
-				rows, _ := db.Query(ctx, `SELECT station_uid, name, city, ST_AsText(geom) FROM bike_stations WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[BikeStationData])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：公共自行車租借站 站點UID：%s 站點名稱：%s 縣市：%s 位置：%s",
-						temp.StationUid,
-						temp.StationName,
-						temp.City,
-						temp.Position,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type: "bike_station",
-						UID:  temp.StationUid,
-						Name: temp.StationName,
-						City: temp.City,
-						Geom: temp.Position,
-					})
-				}
-			case "mrt_station":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, system, ST_AsText(stationposition) FROM mrt_station WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[MrtStationData])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：捷運站 車站UID：%s 車站名稱：%s 捷運系統：%s 位置：%s",
-						temp.StationId,
-						temp.Name,
-						temp.System,
-						temp.Position,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type: "mrt_station",
-						UID:  temp.StationId,
-						Name: temp.Name,
-						City: temp.System,
-						Geom: temp.Position,
-					})
-				}
-			case "thsr_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM thsr_stations WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[RailStationData])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：高鐵車站 車站UID：%s 車站名稱：%s 縣市：%s 位置：%s",
-						temp.StationId,
-						temp.Name,
-						temp.City,
-						temp.Geom,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type: "thsr_station",
-						UID:  temp.StationId,
-						Name: temp.Name,
-						City: temp.City,
-						Geom: temp.Geom,
-					})
-				}
-			case "tra_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM tra_stations WHERE updated_at >= $1;`, since)
-				defer rows.Close()
-				row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[RailStationData])
-				if err != nil {
-					log.Println(err.Error())
-				}
-				for _, temp := range row {
-					text := fmt.Sprintf("類型：台鐵車站 車站UID：%s 車站名稱：%s 縣市：%s 位置：%s",
-						temp.StationId,
-						temp.Name,
-						temp.City,
-						temp.Geom,
-					)
-					input = append(input, text)
-					inrow = append(inrow, resp{
-						Type: "tra_station",
-						UID:  temp.StationId,
-						Name: temp.Name,
-						City: temp.City,
-						Geom: temp.Geom,
-					})
-				}
-			}
-			long := len(input)
-			for i := 0; i < long; i += size {
-				end := i + size
-				if end > long {
-					end = long
-				}
-				temp1 := input[i:end]
-				temp2 := inrow[i:end]
-				body, comp, err, flipopen := callhf(temp1)
-				if err != nil || !comp {
-					log.Printf("[vector] action=vector event=skip reason=api_error,error=%s", err)
-					return
-				}
-				var resp [][]float32
-				if err := json.Unmarshal(body, &resp); err != nil {
-					log.Printf("[vector] action=vector event=unmarshal_error error=%v", err)
-					continue
-				}
-				flipopen()
-				b := &pgx.Batch{}
-				c1 := `INSERT INTO search_vector(
+	processBatch := func(table string, input []string, inrow []resp) bool {
+		if len(input) == 0 {
+			return true
+		}
+		body, comp, err, flipopen := callhf(input)
+		if err != nil || !comp {
+			log.Printf("[vector] action=vector event=skip reason=api_error,error=%s", err)
+			return false
+		}
+		var resp [][]float32
+		if err := json.Unmarshal(body, &resp); err != nil {
+			log.Printf("[vector] action=vector event=unmarshal_error error=%v", err)
+			flipopen()
+			return false
+		}
+		flipopen()
+		b := &pgx.Batch{}
+		c1 := `INSERT INTO search_vector(
 					type,
 					uid,
 					name,
@@ -254,15 +105,208 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					geom = EXCLUDED.geom,
 					blob = EXCLUDED.blob,
 					updated_at = NOW();`
-				for j, temp := range resp {
-					d := temp2[j]
-					b.Queue(c1, d.Type, d.UID, d.Name, d.City, d.DepartSystem, d.Destin, d.Geom, zip(temp))
+		for i, v := range resp {
+			d := inrow[i]
+			b.Queue(c1, d.Type, d.UID, d.Name, d.City, d.DepartSystem, d.Destin, d.Geom, zip(v))
+		}
+		batchResults := db.SendBatch(ctx, b)
+		if err := batchResults.Close(); err != nil {
+			log.Printf("[vector] action=vector event=batch_error error=%v", err)
+			return false
+		}
+		log.Printf("[vector] action=vector event=success table=%s count=%d", table, len(resp))
+		return true
+	}
+	for _, table := range tables {
+		func() {
+			switch table {
+			case "bus_subroutes":
+				rows, _ := db.Query(ctx, `SELECT sub_route_uid, sub_route_name,city,depart,destin FROM bus_static WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, city, depart, destin string
+					if err := rows.Scan(&uid, &name, &city, &depart, &destin); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：公車路線 子路線UID：%s 路線名：%s 縣市：%s 起點站：%s 終點站：%s ", uid, name, city, depart, destin)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type:         "bus_route",
+						UID:          uid,
+						Name:         name,
+						City:         city,
+						DepartSystem: depart,
+						Destin:       destin,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
 				}
-				batchResults := db.SendBatch(ctx, b)
-				if err := batchResults.Close(); err != nil {
-					log.Printf("[vector] action=vector event=batch_error error=%v", err)
+				if !processBatch(table, input, inrow) {
+					return
 				}
-				log.Printf("[vector] action=vector event=success table=%s count=%d", table, len(resp))
+			case "bus_stations":
+				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (station_name) station_uid, station_name, city, ST_AsText(position) FROM bus_stations WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, city, geom string
+					if err := rows.Scan(&uid, &name, &city, &geom); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：公車站牌 站點UID：%s 站點名稱：%s 縣市：%s 位置：%s", uid, name, city, geom)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type: "bus_station",
+						UID:  uid,
+						Name: name,
+						City: city,
+						Geom: geom,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
+				}
+				if !processBatch(table, input, inrow) {
+					return
+				}
+			case "bike_stations":
+				rows, _ := db.Query(ctx, `SELECT station_uid, name, city, ST_AsText(geom) FROM bike_stations WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, city, geom string
+					if err := rows.Scan(&uid, &name, &city, &geom); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：公共自行車租借站 站點UID：%s 站點名稱：%s 縣市：%s 位置：%s", uid, name, city, geom)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type: "bike_station",
+						UID:  uid,
+						Name: name,
+						City: city,
+						Geom: geom,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
+				}
+				if !processBatch(table, input, inrow) {
+					return
+				}
+			case "mrt_station":
+				rows, _ := db.Query(ctx, `SELECT station_id, name, system, ST_AsText(stationposition) FROM mrt_station WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, system, geom string
+					if err := rows.Scan(&uid, &name, &system, &geom); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：捷運站 車站UID：%s 車站名稱：%s 捷運系統：%s 位置：%s", uid, name, system, geom)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type: "mrt_station",
+						UID:  uid,
+						Name: name,
+						City: system,
+						Geom: geom,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
+				}
+				if !processBatch(table, input, inrow) {
+					return
+				}
+			case "thsr_stations":
+				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM thsr_stations WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, city, geom string
+					if err := rows.Scan(&uid, &name, &city, &geom); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：高鐵車站 車站UID：%s 車站名稱：%s 縣市：%s 位置：%s", uid, name, city, geom)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type: "thsr_station",
+						UID:  uid,
+						Name: name,
+						City: city,
+						Geom: geom,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
+				}
+				if !processBatch(table, input, inrow) {
+					return
+				}
+			case "tra_stations":
+				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM tra_stations WHERE updated_at >= $1;`, since)
+				defer rows.Close()
+				input := make([]string, 0, size)
+				inrow := make([]resp, 0, size)
+				for rows.Next() {
+					var uid, name, city, geom string
+					if err := rows.Scan(&uid, &name, &city, &geom); err != nil {
+						log.Printf("[vector] action=vector event=scan_error error=%v", err)
+						continue
+					}
+					text := fmt.Sprintf("類型：台鐵車站 車站UID：%s 車站名稱：%s 縣市：%s 位置：%s", uid, name, city, geom)
+					input = append(input, text)
+					inrow = append(inrow, resp{
+						Type: "tra_station",
+						UID:  uid,
+						Name: name,
+						City: city,
+						Geom: geom,
+					})
+					if len(input) >= size {
+						if !processBatch(table, input, inrow) {
+							return
+						}
+						input = input[:0]
+						inrow = inrow[:0]
+					}
+				}
+				if !processBatch(table, input, inrow) {
+					return
+				}
 			}
 		}()
 	}

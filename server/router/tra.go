@@ -163,7 +163,7 @@ func tra_price(start, end string, ctx context.Context, client *resty.Client, db 
 			Price:      temp.price,
 		})
 	}
-	bytes, _ := proto.Marshal(&models.TraFareItem{})
+	bytes, _ := proto.Marshal(&models.TraFareItems{Items: arr})
 	if err != nil {
 		log.Printf("proto marshal error: %v", err)
 	} else {
@@ -175,7 +175,7 @@ func tra_price(start, end string, ctx context.Context, client *resty.Client, db 
 }
 func thsr_price(start, end string, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
 	arr := []*models.ThsaFare{}
-	rows, _ := db.Query(ctx, `SELECT ticket_type, fare_class,fare_class,price FROM thsr_fares WHERE origin_station_id = $1 AND destination_station_id = $2;`, start, end)
+	rows, _ := db.Query(ctx, `SELECT ticket_type, fare_class, cabin_class, price FROM thsr_fares WHERE origin_station_id = $1 AND destination_station_id = $2;`, start, end)
 	defer rows.Close()
 	row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[thsrfare])
 	if err != nil {
@@ -190,7 +190,7 @@ func thsr_price(start, end string, ctx context.Context, client *resty.Client, db
 			Price:      temp.price,
 		})
 	}
-	bytes, _ := proto.Marshal(&models.ThsaFare{})
+	bytes, _ := proto.Marshal(&models.ThsaFares{Items: arr})
 	if err != nil {
 		log.Printf("proto marshal error: %v", err)
 	} else {
@@ -301,12 +301,16 @@ func tra_timetable(start, end string, date time.Time, ctx context.Context, clien
 		log.Println(err.Error())
 	}
 	for _, temp := range row {
-		w, err := time.Parse(mp[temp.trainno].Starting_Time, time.TimeOnly)
+		seed, ok := mp[temp.trainno]
+		if !ok {
+			continue
+		}
+		w, err := time.Parse(time.TimeOnly, seed.Starting_Time)
 		if err != nil {
 			log.Printf("parse time error: %v", err)
 			continue
 		}
-		t, err := time.Parse(temp.Arrivaltime, time.TimeOnly)
+		t, err := time.Parse(time.TimeOnly, temp.Arrivaltime)
 		if err != nil {
 			log.Printf("parse time error: %v", err)
 			continue
@@ -317,7 +321,7 @@ func tra_timetable(start, end string, date time.Time, ctx context.Context, clien
 		}
 		arr = append(arr, mp[temp.trainno])
 	}
-	bytes, _ := proto.Marshal(&models.TraTimetables{})
+	bytes, _ := proto.Marshal(&models.TraTimetables{Items: arr})
 	if err != nil {
 		log.Printf("proto marshal error: %v", err)
 	} else {
@@ -358,12 +362,16 @@ func thsr_timetable(start, end string, date time.Time, ctx context.Context, clie
 		log.Println(err.Error())
 	}
 	for _, temp := range row {
-		w, err := time.Parse(mp[temp.trainno].Starting_Time, time.TimeOnly)
+		seed, ok := mp[temp.trainno]
+		if !ok {
+			continue
+		}
+		w, err := time.Parse(time.TimeOnly, seed.Starting_Time)
 		if err != nil {
 			log.Printf("parse time error: %v", err)
 			continue
 		}
-		t, err := time.Parse(temp.Arrivaltime, time.TimeOnly)
+		t, err := time.Parse(time.TimeOnly, temp.Arrivaltime)
 		if err != nil {
 			log.Printf("parse time error: %v", err)
 			continue
@@ -374,11 +382,11 @@ func thsr_timetable(start, end string, date time.Time, ctx context.Context, clie
 		}
 		arr = append(arr, mp[temp.trainno])
 	}
-	bytes, _ := proto.Marshal(&models.ThsrTimetables{})
+	bytes, _ := proto.Marshal(&models.ThsrTimetables{Items: arr})
 	if err != nil {
 		log.Printf("proto marshal error: %v", err)
 	} else {
-		err = rc.Set(fmt.Sprintf("TRA_timetable:%s:%s:%s", date.Format(time.DateOnly), start, end), bytes, 1*time.Hour).Err()
+		err = rc.Set(fmt.Sprintf("THSR_timetable:%s:%s:%s", date.Format(time.DateOnly), start, end), bytes, 1*time.Hour).Err()
 		if err != nil {
 			log.Printf("redis set error: %v", err)
 		}
@@ -481,7 +489,7 @@ func get_tra_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 			log.Printf("[RAIL] action=timetable event=create_temp_error error=%v", err)
 			return
 		}
-		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_tra"}, []string{"train_date", "trainno", "direction", "starting_station_id", "ending_station_id", "train_type_id", "train_type_code", "train_type_name", "tripline", "stopsequence", "stationid", "stationname", "arrivaltime", "departuretime", "mask", "note"}, pgx.CopyFromRows(row))
+		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_tra"}, []string{"train_date", "trainno", "direction", "starting_station_id", "starting_station_name", "ending_station_id", "ending_station_name", "train_type_id", "train_type_code", "train_type_name", "tripline", "stopsequence", "stationid", "stationname", "arrivaltime", "departuretime", "mask", "note"}, pgx.CopyFromRows(row))
 		if err == nil {
 			if _, err = b.Exec(ctx, c2); err != nil {
 				log.Printf("[RAIL] action=tra_timetable event=exec_error error=%v", err)
@@ -503,7 +511,7 @@ func get_tra_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 
 func get_thsr_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Client, rc *redis.Client, Date string) {
 	log.Printf("[RAIL] action=thsr_timetable event=start")
-	dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/THSR/DailyTimetable/TrainDate/%s", Date), "tra_traindate")
+	dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/THSR/DailyTimetable/TrainDate/%s", Date), "thsr_traindate")
 	if err != nil || !comp {
 		log.Printf("[RAIL] action=thsr_timetable event=skip reason=api_error")
 		return
@@ -583,7 +591,7 @@ func get_thsr_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Cli
 			log.Printf("[RAIL] action=timetable event=create_temp_error error=%v", err)
 			return
 		}
-		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_thsr"}, []string{"train_date", "trainno", "direction", "starting_station_id", "ending_station_id", "stopsequence", "stationid", "stationname", "arrivaltime", "departuretime", "note"}, pgx.CopyFromRows(row))
+		_, err = b.CopyFrom(ctx, pgx.Identifier{"temp_thsr"}, []string{"train_date", "trainno", "direction", "starting_station_id", "starting_station_name", "ending_station_id", "ending_station_name", "stopsequence", "stationid", "stationname", "arrivaltime", "departuretime", "note"}, pgx.CopyFromRows(row))
 		if err == nil {
 			if _, err = b.Exec(ctx, c2); err != nil {
 				log.Printf("[RAIL] action=thsr_timetable event=exec_error error=%v", err)
