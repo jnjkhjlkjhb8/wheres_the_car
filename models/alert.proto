@@ -1,0 +1,19 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+
+service Alert_Service {
+  rpc busNews(Alert_Bus_Ask)       returns (stream Alert_Msg) {}
+  rpc metroAlert(Alert_Metro_Ask)  returns (stream Alert_Msg) {}
+  rpc traAlert(Alert_Ask)          returns (stream Alert_Msg) {}
+  rpc thsrAlert(Alert_Ask)         returns (stream Alert_Msg) {}
+}
+message Alert_Ask {}
+message Alert_Bus_Ask {
+  string city = 1;
+}
+message Alert_Metro_Ask {
+  string system = 1;
+}
+message Alert_Msg {
+  bytes data = 1;
+}
