@@ -1,17 +1,18 @@
+# Build context: repo root
+# docker build -f server/functions/Dockerfile -t bus-functions .
+
 FROM golang:1.26.3-alpine3.23 AS builder
-RUN apk add --no-cache protobuf-dev protoc git
+RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 RUN go mod download
+# Go pb stubs are committed — no protoc needed
 COPY models/ ./models/
-COPY server/ ./server/
-RUN protoc --go_out=. --go_opt=paths=source_relative models/*.proto
-RUN CGO_ENABLED=0 GOMEMLIMIT=400MiB GOOS=linux go build -o handler ./server/functions
+COPY server/functions/ ./server/functions/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o functions ./server/functions
 
 FROM alpine:3.23
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /root/
-COPY --from=builder /app/handler .
-EXPOSE 8080
-ENTRYPOINT ["./handler"]
+COPY --from=builder /app/functions .
+ENTRYPOINT ["./functions"]

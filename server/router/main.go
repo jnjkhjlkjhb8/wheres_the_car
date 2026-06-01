@@ -173,7 +173,7 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
-	lis, err := net.Listen("tcp", "localhost:50051")
+	lis, err := net.Listen("tcp", "0.0.0.0:50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -192,6 +192,8 @@ func main() {
 	pb.RegisterTRA_DetainServiceServer(grpcServer, &Tra_DetainServer{db: db, client: c, rc: rc})
 	pb.RegisterThsr_DetainServiceServer(grpcServer, &Thsr_DetainServer{db: db, client: c, rc: rc})
 	pb.RegisterNear_Station_ServiceServer(grpcServer, &Near_Server{db: db})
+	pb.RegisterAlert_ServiceServer(grpcServer, &AlertServer{rc: rc})
+	go startHTTPServer()
 	log.Printf("gRPC server is running on port %d", 50051)
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)

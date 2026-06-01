@@ -82,6 +82,10 @@ func main() {
 	})
 	r.Start()
 	defer r.Stop()
+	mqttClient := startMQTT(rc)
+	if mqttClient != nil {
+		defer mqttClient.Disconnect(500)
+	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
