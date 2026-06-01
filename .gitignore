@@ -51,5 +51,11 @@ android/app/build.gradle.kts
 .gitignore
 android/app/src/main/AndroidManifest.xml
 server/router/server.go
-server/router/Dockerfile
 docs/spec/requirements.md
+
+# Docker secrets and large data files
+docker.env
+osrm-data/
+
+# Generated Dart gRPC stubs (regenerate via scripts/gen-dart-grpc.sh)
+frontend/lib/generated/
