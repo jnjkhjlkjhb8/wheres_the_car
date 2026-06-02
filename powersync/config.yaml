@@ -3,11 +3,11 @@
 replication:
   connections:
     - type: postgresql
-      uri: !env DATABASE_URL
+      uri: !env PS_DATABASE_URL
 
 client_auth:
   jwks_urls:
-    - !env POWERSYNC_JWKS_URL
+    - !env PS_POWERSYNC_JWKS_URL
 
 sync_rules:
   path: /config/sync-rules.yaml
