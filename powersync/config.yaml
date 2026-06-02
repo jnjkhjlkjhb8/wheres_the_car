@@ -10,4 +10,4 @@ client_auth:
     - !env POWERSYNC_JWKS_URL
 
 sync_rules:
-  path: /app/sync-rules.yaml
+  path: /config/sync-rules.yaml
