@@ -1,0 +1,41 @@
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: ''
+        required: true
+        type: choice
+        options:
+          - all
+          - router
+          - functions
+          - powersync
+          - osrm
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, ubuntu]
+    steps:
+      - name: Pull latest code
+        run: |
+          cd ~/bus
+          git pull origin main
+      - name: Rebuild and restart (all)
+        if: ${{ inputs.target == 'all' }}
+        run: |
+          cd ~/bus
+          docker compose down
+          docker compose up -d --build
+      - name: Rebuild and restart (single service)
+        if: ${{ inputs.target != 'all' }}
+        run: |
+          cd ~/bus
+          docker compose stop ${{ inputs.target }}
+          docker compose rm -f ${{ inputs.target }}
+          docker compose up -d --build ${{ inputs.target }}
+      - name: Health check
+        run: |
+          sleep 15
+          curl -sf http://localhost:8080/api/.well-known/jwks.json > /dev/null && echo "router OK"
+          docker compose -f ~/bus/docker-compose.yaml ps
