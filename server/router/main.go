@@ -15,7 +15,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
-	pb "github.com/jnjkhjlkjhb8/bus/models"
+	pb "github.com/jnjkhjlkjhb8/wheres_the_car/models"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"

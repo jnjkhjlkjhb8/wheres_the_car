@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-redis/redis"
-	pb "github.com/jnjkhjlkjhb8/bus/models"
+	pb "github.com/jnjkhjlkjhb8/wheres_the_car/models"
 	"google.golang.org/grpc"
 )
 

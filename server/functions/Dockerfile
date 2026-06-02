@@ -1,5 +1,5 @@
 # Build context: repo root
-# docker build -f server/functions/Dockerfile -t bus-functions .
+# docker build -f server/functions/Dockerfile -t wheres_the_car-functions .
 
 FROM golang:1.26.3-alpine3.23 AS builder
 RUN apk add --no-cache git protobuf-dev

@@ -1,6 +1,6 @@
 {
-    "name": "bus",
-    "short_name": "bus",
+    "name": "wheres_the_car",
+    "short_name": "我車呢？",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

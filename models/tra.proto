@@ -1,5 +1,5 @@
 syntax = "proto3";
-option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+option go_package = "github.com/jnjkhjlkjhb8/wheres_the_car/models";
 service TRA_station_service{
   rpc live_board(ask_staiton) returns (stream Resp_tra_live_board) {}
 }

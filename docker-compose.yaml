@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: server/router/Dockerfile
-    image: bus-router
+    image: wheres_the_car-router
     ports:
       - "50051:50051"
       - "8080:8080"
@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: server/functions/Dockerfile
-    image: bus-functions
+    image: wheres_the_car-functions
     env_file: ./docker.env
     environment:
       GOMEMLIMIT: 296MiB

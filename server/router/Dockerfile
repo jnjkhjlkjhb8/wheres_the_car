@@ -1,5 +1,5 @@
 # Build context: repo root
-# docker build -f server/router/Dockerfile -t bus-router .
+# docker build -f server/router/Dockerfile -t wheres_the_car-router .
 
 FROM golang:1.26.3-alpine3.23 AS builder
 RUN apk add --no-cache git protobuf-dev

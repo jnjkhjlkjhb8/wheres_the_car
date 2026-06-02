@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/jnjkhjlkjhb8/bus/models"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/models"
 
 	"fmt"
 	"log"

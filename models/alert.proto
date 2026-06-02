@@ -1,5 +1,5 @@
 syntax = "proto3";
-option go_package = "github.com/jnjkhjlkjhb8/bus/models";
+option go_package = "github.com/jnjkhjlkjhb8/wheres_the_car/models";
 
 service Alert_Service {
   rpc busNews(Alert_Bus_Ask)       returns (stream Alert_Msg) {}

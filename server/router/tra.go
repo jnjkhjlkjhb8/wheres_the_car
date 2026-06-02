@@ -12,7 +12,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jnjkhjlkjhb8/bus/models"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/models"
 	"google.golang.org/protobuf/proto"
 )
 

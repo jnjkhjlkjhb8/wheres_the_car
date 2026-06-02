@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/jnjkhjlkjhb8/bus/models"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/models"
 
 	"context"
 	"encoding/json"

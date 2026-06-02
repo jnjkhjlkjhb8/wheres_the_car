@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jnjkhjlkjhb8/bus/models"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/models"
 
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"

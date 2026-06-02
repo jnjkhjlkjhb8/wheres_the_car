@@ -1,4 +1,4 @@
-module github.com/jnjkhjlkjhb8/bus
+module github.com/jnjkhjlkjhb8/wheres_the_car
 
 go 1.26.3
 
