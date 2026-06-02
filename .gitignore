@@ -59,3 +59,7 @@ osrm-data/
 
 # Generated Dart gRPC stubs (regenerate via scripts/gen-dart-grpc.sh)
 frontend/lib/generated/
+
+# Generated Go protobuf stubs (generated in Docker build)
+models/*.pb.go
+models/*_grpc.pb.go
