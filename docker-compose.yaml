@@ -44,7 +44,7 @@ services:
     environment:
       GOMEMLIMIT: 148MiB
       REDIS_ADDR: redis:6379
-    mem_limit: 192m
+    mem_limit: 500m
     depends_on:
       redis:
         condition: service_healthy
