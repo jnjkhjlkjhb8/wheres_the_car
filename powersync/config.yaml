@@ -1,11 +1,11 @@
 # Ref: https://docs.powersync.com/self-hosting
 
 source:
-  type: postgres
+  type: postgresql
   uri: !env PS_DATABASE_URL
 
 storage:
-  type: postgres
+  type: postgresql
   uri: !env PS_DATABASE_URL
 
 client_auth:
