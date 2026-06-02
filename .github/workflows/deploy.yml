@@ -15,6 +15,7 @@ on:
 
 jobs:
   deploy:
+    if: github.actor == github.repository_owner
     runs-on: [self-hosted, ubuntu]
     steps:
       - name: Pull latest code
