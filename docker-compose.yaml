@@ -59,6 +59,7 @@ services:
     env_file: ./docker.env
     environment:
       POWERSYNC_JWKS_URL: http://router:8080/api/.well-known/jwks.json
+      POWERSYNC_CONFIG_PATH: /config/config.yaml
     mem_limit: 512m
     depends_on:
       router:
