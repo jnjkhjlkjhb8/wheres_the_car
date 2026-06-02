@@ -42,9 +42,9 @@ services:
     image: bus-functions
     env_file: ./docker.env
     environment:
-      GOMEMLIMIT: 148MiB
+      GOMEMLIMIT: 296MiB
       REDIS_ADDR: redis:6379
-    mem_limit: 500m
+    mem_limit: 350m
     depends_on:
       redis:
         condition: service_healthy

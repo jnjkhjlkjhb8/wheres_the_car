@@ -51,7 +51,7 @@ android/app/build.gradle.kts
 .gitignore
 android/app/src/main/AndroidManifest.xml
 server/router/server.go
-docs/spec/requirements.md
+docs/requirements.md
 
 # Docker secrets and large data files
 docker.env
@@ -63,3 +63,4 @@ frontend/lib/generated/
 # Generated Go protobuf stubs (generated in Docker build)
 models/*.pb.go
 models/*_grpc.pb.go
+/docs/README.md
