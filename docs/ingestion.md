@@ -87,6 +87,33 @@
   - `tra_timetable`
   - `thsr_timetable`
 
+## TDX MQTT 訂閱
+
+- 實作位置：`server/functions/mqtt.go`，啟動函數 `startMQTT(rc)`
+- 在 `main.go` 於 cron 排程啟動後呼叫，程式結束時呼叫 `Disconnect(500)`
+- 若 `MQTT_CLIENT_ID` / `MQTT_USERNAME` / `MQTT_PASSWORD` 任一為空則跳過，不影響其他排程
+
+### 連線
+- Broker：`mqtts://mqtt.transportdata.tw:8883`（MQTTS / TLS）
+- 憑證：`MQTT_CLIENT_ID`、`MQTT_USERNAME`、`MQTT_PASSWORD`
+- `SetAutoReconnect(true)` + `SetConnectRetry(true)` + 每 10 秒重連
+- 所有訂閱於 `OnConnectHandler` 中重新建立（確保斷線重連後恢復）
+
+### 訂閱主題與 Redis 行為
+
+| MQTT topic（QoS 1）| Redis key | TTL |
+|---|---|---|
+| `v2/Bus/RealTimeNearStop/City/#` | `mqtt:v2:Bus:RealTimeNearStop:City:{city}:{routeId}` | 60 秒 |
+| `v2/Bus/News/City/+` | `mqtt:v2:Bus:News:City:{city}` | 5 分鐘 |
+| `v2/Bus/News/InterCity` | `mqtt:v2:Bus:News:InterCity` | 5 分鐘 |
+| `v2/Rail/Metro/Alert/#` | `mqtt:v2:Rail:Metro:Alert:{system}` | 5 分鐘 |
+| `v3/Rail/TRA/Alert` | `mqtt:v3:Rail:TRA:Alert` | 5 分鐘 |
+| `v2/Rail/THSR/AlertInfo` | `mqtt:v2:Rail:THSR:AlertInfo` | 5 分鐘 |
+
+- Redis key 推導規則：`"mqtt:" + topic.replace("/", ":")`
+- 每筆訊息：`rc.Set(key, payload, ttl)` 存快取 + `rc.Publish(key, payload)` 推送至 Pub/Sub
+- 訊息格式：TDX 標準 JSON，**不解析**，原文儲存
+
 ## 向量更新 (changetovector)
 - 來源
   - `bus_static`, `bus_stations`, `bike_stations`, `mrt_station`, `tra_stations`, `thsr_stations`

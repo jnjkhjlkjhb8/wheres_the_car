@@ -16,6 +16,14 @@
   - `tra:delay:all`
   - `tra:delay:{train_no}`
   - `tra:liveboard:{station_id}`
+- MQTT Alert（由 TDX MQTT 訂閱寫入）
+  - `mqtt:v2:Bus:News:City:{city}`
+  - `mqtt:v2:Bus:News:InterCity`
+  - `mqtt:v2:Rail:Metro:Alert:{system}`
+  - `mqtt:v3:Rail:TRA:Alert`
+  - `mqtt:v2:Rail:THSR:AlertInfo`
+- MQTT 即時公車（由 TDX MQTT 訂閱寫入）
+  - `mqtt:v2:Bus:RealTimeNearStop:City:{city}:{routeId}`
 
 ## 快取 key
 - Bus
@@ -34,6 +42,14 @@
   - key：`train_no`
   - value：`delay` (秒)
 
+## MQTT 快取 key
+- `mqtt:v2:Bus:RealTimeNearStop:City:{city}:{routeId}`
+- `mqtt:v2:Bus:News:City:{city}`
+- `mqtt:v2:Bus:News:InterCity`
+- `mqtt:v2:Rail:Metro:Alert:{system}`
+- `mqtt:v3:Rail:TRA:Alert`
+- `mqtt:v2:Rail:THSR:AlertInfo`
+
 ## TTL
 - Bus ETA
   - `bus_eta_route:*`：180 秒
@@ -48,6 +64,14 @@
   - `tra:liveboard:*`：180 秒
 - Bus DailyTimetable
   - `bus_daily_timetable:*`：23.5 小時
+- MQTT Alert
+  - `mqtt:v2:Bus:News:*`：5 分鐘
+  - `mqtt:v2:Bus:News:InterCity`：5 分鐘
+  - `mqtt:v2:Rail:Metro:Alert:*`：5 分鐘
+  - `mqtt:v3:Rail:TRA:Alert`：5 分鐘
+  - `mqtt:v2:Rail:THSR:AlertInfo`：5 分鐘
+- MQTT 即時公車
+  - `mqtt:v2:Bus:RealTimeNearStop:*`：60 秒
 - Fares/Timetables
   - `TRA_Fare:*`：8 小時
   - `THSR_Fare:*`：1 小時

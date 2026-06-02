@@ -11,6 +11,7 @@
 - Thsr_timetable_service
 - Thsr_Detain_service
 - Near_Station_Service
+- Alert_Service
 
 ## Bus_Route_Service (`models/bus.proto`)
 ### static
@@ -171,6 +172,43 @@
   - Redis 查詢，不存在時觸發 DB/API 更新
 - Redis key
   - `THSR_Stoptimes:{date}:{train_no}`
+
+## Alert_Service (`models/alert.proto`)
+
+來源：TDX MQTT 訊息，由 `server/functions` 接收後存入 Redis Pub/Sub。
+串流資料為 TDX 原始 JSON（`bytes data`）。
+
+### busNews
+- RPC：`busNews(Alert_Bus_Ask) -> stream Alert_Msg`
+- 輸入
+  - `city`：城市代碼（如 `Taipei`）
+- 行為
+  - 訂閱 Redis Pub/Sub 串流
+- Redis channel
+  - `mqtt:v2:Bus:News:City:{city}`
+
+### metroAlert
+- RPC：`metroAlert(Alert_Metro_Ask) -> stream Alert_Msg`
+- 輸入
+  - `system`：捷運系統代碼（如 `TRTC`、`KRTC`、`KLRT`、`TYMC`）
+- 行為
+  - 訂閱 Redis Pub/Sub 串流
+- Redis channel
+  - `mqtt:v2:Rail:Metro:Alert:{system}`
+
+### traAlert
+- RPC：`traAlert(Alert_Ask) -> stream Alert_Msg`
+- 行為
+  - 訂閱 Redis Pub/Sub 串流
+- Redis channel
+  - `mqtt:v3:Rail:TRA:Alert`
+
+### thsrAlert
+- RPC：`thsrAlert(Alert_Ask) -> stream Alert_Msg`
+- 行為
+  - 訂閱 Redis Pub/Sub 串流
+- Redis channel
+  - `mqtt:v2:Rail:THSR:AlertInfo`
 
 ## Near_Station_Service (`models/near.proto`)
 ### near
