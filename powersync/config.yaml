@@ -1,0 +1,13 @@
+# Ref: https://docs.powersync.com/self-hosting
+
+replication:
+  connections:
+    - type: postgresql
+      uri: !env DATABASE_URL
+
+client_auth:
+  jwks_urls:
+    - !env POWERSYNC_JWKS_URL
+
+sync_rules:
+  path: /app/sync-rules.yaml
