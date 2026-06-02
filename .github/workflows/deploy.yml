@@ -21,20 +21,20 @@ jobs:
         run: |
           cd ~/bus
           git pull origin main
-      - name: Rebuild and restart (all)
+      - name: rebuild
         if: ${{ inputs.target == 'all' }}
         run: |
           cd ~/bus
           docker compose down
           docker compose up -d --build
-      - name: Rebuild and restart (single service)
+      - name: rebuild
         if: ${{ inputs.target != 'all' }}
         run: |
           cd ~/bus
           docker compose stop ${{ inputs.target }}
           docker compose rm -f ${{ inputs.target }}
           docker compose up -d --build ${{ inputs.target }}
-      - name: Health check
+      - name: check
         run: |
           sleep 15
           curl -sf http://localhost:8080/api/.well-known/jwks.json > /dev/null && echo "router OK"
