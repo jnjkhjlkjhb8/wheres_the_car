@@ -45,6 +45,7 @@ func main() {
 				return r.StatusCode() == 429
 			},
 		)
+	busDailyroute(c, rc)
 	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")

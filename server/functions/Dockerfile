@@ -1,4 +1,4 @@
-# Build context: repo root
+# Build context: ./docker-compose.yaml
 # docker build -f server/functions/Dockerfile -t wheres_the_car-functions .
 
 FROM golang:1.26.3-alpine3.23 AS builder

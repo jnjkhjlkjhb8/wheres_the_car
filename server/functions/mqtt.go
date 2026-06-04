@@ -1,4 +1,5 @@
 package main
+
 import (
 	"crypto/tls"
 	"log"
@@ -9,10 +10,12 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/go-redis/redis"
 )
+
 type mqttTopicCfg struct {
 	pattern string
 	ttl     time.Duration
 }
+
 var mqttTopics = []mqttTopicCfg{
 	{"v2/Bus/RealTimeNearStop/City/#", 60 * time.Second},
 	{"v2/Bus/News/City/+", 5 * time.Minute},
@@ -21,6 +24,7 @@ var mqttTopics = []mqttTopicCfg{
 	{"v3/Rail/TRA/Alert", 5 * time.Minute},
 	{"v2/Rail/THSR/AlertInfo", 5 * time.Minute},
 }
+
 func startMQTT(rc *redis.Client) mqtt.Client {
 	clientID := os.Getenv("MQTT_CLIENT_ID")
 	username := os.Getenv("MQTT_USERNAME")
@@ -37,11 +41,11 @@ func startMQTT(rc *redis.Client) mqtt.Client {
 		SetCleanSession(true).
 		SetAutoReconnect(true).
 		SetConnectRetry(true).
-		SetConnectRetryInterval(10*time.Second).
+		SetConnectRetryInterval(10 * time.Second).
 		SetTLSConfig(&tls.Config{}).
 		SetOnConnectHandler(func(c mqtt.Client) {
 			log.Println("[MQTT] connected")
-			mqttSubscribeAll(c, rc)
+			mqttsubscribeall(c, rc)
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			log.Printf("[MQTT] connection lost: %v", err)
@@ -54,11 +58,11 @@ func startMQTT(rc *redis.Client) mqtt.Client {
 	}
 	return c
 }
-func mqttSubscribeAll(c mqtt.Client, rc *redis.Client) {
+func mqttsubscribeall(c mqtt.Client, rc *redis.Client) {
 	for _, t := range mqttTopics {
 		pattern, ttl := t.pattern, t.ttl
 		tok := c.Subscribe(pattern, 1, func(_ mqtt.Client, msg mqtt.Message) {
-			mqttHandle(rc, msg, ttl)
+			mqtthandle(rc, msg, ttl)
 		})
 		tok.Wait()
 		if err := tok.Error(); err != nil {
@@ -68,7 +72,7 @@ func mqttSubscribeAll(c mqtt.Client, rc *redis.Client) {
 		}
 	}
 }
-func mqttHandle(rc *redis.Client, msg mqtt.Message, ttl time.Duration) {
+func mqtthandle(rc *redis.Client, msg mqtt.Message, ttl time.Duration) {
 	key := "mqtt:" + strings.ReplaceAll(msg.Topic(), "/", ":")
 	if err := rc.Set(key, msg.Payload(), ttl).Err(); err != nil {
 		log.Printf("[MQTT] redis set failed key=%s err=%v", key, err)

@@ -52,6 +52,7 @@ message thsa_timetable{
   string EndingStationID = 6;
   string EndingStationName = 7;
   string Note = 8;
+  bool Overnight = 9;
   string Starting_Time = 12;
   string Ending_Time = 13;
   string Travel_Time = 14;
