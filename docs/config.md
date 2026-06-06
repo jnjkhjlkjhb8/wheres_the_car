@@ -1,3 +1,4 @@
+made by claude
 # 設定與環境變數
 
 ## Redis

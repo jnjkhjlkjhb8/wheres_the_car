@@ -1,3 +1,4 @@
+made by claude
 # gRPC 服務規格
 
 ## 服務列表

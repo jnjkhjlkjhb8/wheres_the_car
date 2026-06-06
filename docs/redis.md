@@ -1,3 +1,4 @@
+made by claude
 # Redis 規格
 
 ## 連線
