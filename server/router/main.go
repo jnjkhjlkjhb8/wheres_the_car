@@ -102,7 +102,6 @@ func newRateLimiter() *rateLimiter {
 func (r *rateLimiter) allow(ip string, limit int, window time.Duration) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
 	now := time.Now()
 	if now.Sub(r.windowAt) >= window {
 		r.windowAt = now
@@ -110,11 +109,9 @@ func (r *rateLimiter) allow(ip string, limit int, window time.Duration) bool {
 			delete(r.counts, k)
 		}
 	}
-
 	r.counts[ip]++
 	return r.counts[ip] <= limit
 }
-
 func rateLimitInterceptor(rl *rateLimiter, limit int, window time.Duration) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		if !allowRequest(ctx, rl, limit, window) {
@@ -123,7 +120,6 @@ func rateLimitInterceptor(rl *rateLimiter, limit int, window time.Duration) grpc
 		return handler(ctx, req)
 	}
 }
-
 func rateLimitStreamInterceptor(rl *rateLimiter, limit int, window time.Duration) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if !allowRequest(ss.Context(), rl, limit, window) {
@@ -132,7 +128,6 @@ func rateLimitStreamInterceptor(rl *rateLimiter, limit int, window time.Duration
 		return handler(srv, ss)
 	}
 }
-
 func allowRequest(ctx context.Context, rl *rateLimiter, limit int, window time.Duration) bool {
 	peerInfo, ok := peer.FromContext(ctx)
 	if !ok || peerInfo.Addr == nil {
@@ -214,6 +209,37 @@ func (s *BusRouteserver) Daily(_ context.Context, in *pb.Bus_Ask_Route) (*pb.Res
 
 func (s *BusRouteserver) Eta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_Service_EtaServer) error {
 	return s.BusRouteEta(in, stream)
+}
+
+func (s *BusRouteserver) Fare(ctx context.Context, in *pb.Bus_Ask_Route) (*pb.Bus_Fare, error) {
+	log.Printf("[gRPC] action=bus_fare uid=%s", in.SubRouteUID)
+	key := fmt.Sprintf("bus_fare:%s", in.SubRouteUID)
+	if val, err := s.rc.Get(key).Bytes(); err == nil {
+		var fare pb.Bus_Fare
+		if err := proto.Unmarshal(val, &fare); err == nil {
+			return &fare, nil
+		}
+	}
+	var type2 int16
+	var free bool
+	var select2 []byte
+	err := s.db.QueryRow(ctx,
+		`SELECT fare_pricing_type, is_free_bus, section_fares FROM bus_fares WHERE sub_route_uid = $1`,
+		in.SubRouteUID,
+	).Scan(&type2, &free, &select2)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "no fare data for %s", in.SubRouteUID)
+	}
+	resp := &pb.Bus_Fare{
+		SubRouteUid:      in.SubRouteUID,
+		FarePricingType:  int32(type2),
+		IsFreeBus:        free,
+		SectionFaresJson: select2,
+	}
+	if data, err := proto.Marshal(resp); err == nil {
+		s.rc.Set(key, data, 24*time.Hour)
+	}
+	return resp, nil
 }
 
 func (s *BusStationserver) Eta(in *pb.Bus_Ask_Route, stream pb.Bus_Station_Service_EtaServer) error {
@@ -315,6 +341,54 @@ func (s *ThsrServer) Fare(ctx context.Context, in *pb.Ask_Thsr) (*pb.ThsaFare, e
 		return nil, status.Error(codes.NotFound, "fare not found")
 	}
 	return items.Items[0], nil
+}
+
+func (s *ThsrServer) AvailableSeats(in *pb.Ask_Thsr, stream grpc.ServerStreamingServer[pb.RespThsrSeats]) error {
+	log.Printf("[gRPC] action=thsr_available_seats date=%s", in.Date)
+	channel := fmt.Sprintf("thsr_seats:%s:*", in.Date)
+	var cursor uint64
+	for {
+		if err := stream.Context().Err(); err != nil {
+			return err
+		}
+		keys, next, err := s.rc.Scan(cursor, channel, 20).Result()
+		if err != nil {
+			break
+		}
+		for _, i := range keys {
+			val, err := s.rc.Get(i).Bytes()
+			if err != nil {
+				continue
+			}
+			resp := &pb.RespThsrSeats{Data: val}
+			if err = stream.Send(resp); err != nil {
+				return err
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			t, _ := time.Parse(time.RFC3339, in.Date)
+			get_thsr_availableseatstatus(s.client, s.rc, t.Format(time.DateOnly))
+			break
+		}
+	}
+	sub := s.rc.PSubscribe(fmt.Sprintf("thsr_seats:%s:*", in.Date))
+	defer func(sub *redis.PubSub) { _ = sub.Close() }(sub)
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		default:
+		}
+		m, err := sub.ReceiveMessage()
+		if err != nil {
+			return err
+		}
+		resp := &pb.RespThsrSeats{Data: []byte(m.Payload)}
+		if err = stream.Send(resp); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *ThsrServer) Timetable(ctx context.Context, in *pb.Ask_Thsr) (*pb.ThsrTimetables, error) {
@@ -447,18 +521,32 @@ func (s *BusRouteserver) BusDailytable(in *pb.Bus_Ask_Route) (*pb.Resp_BusEta, e
 }
 func (s *MrtServer) MrtEta(in *pb.AskMrt, stream pb.Mrt_Service_EtaServer) error {
 	log.Printf("call Mrt_eta %s %s", in.System, in.StationID)
-	sub := s.rc.Subscribe(fmt.Sprintf("mrt_live:%s:%s", in.System, in.StationID))
-	val := s.rc.Get(fmt.Sprintf("mrt_live:%s:%s", in.System, in.StationID))
-	resp := &pb.Resp_MrtEta{
-		Data: []byte(val.Val()),
+	channel := fmt.Sprintf("mrt_live:%s:%s", in.System, in.StationID)
+	sub := s.rc.Subscribe(channel)
+	defer func(sub *redis.PubSub) { _ = sub.Close() }(sub)
+	key := fmt.Sprintf("mrt_live:%s:%s:*", in.System, in.StationID)
+	var cursor uint64
+	for {
+		keys, next, err := s.rc.Scan(cursor, key, 20).Result()
+		if err != nil {
+			break
+		}
+		for _, i := range keys {
+			val := s.rc.Get(i)
+			if val.Err() != nil {
+				continue
+			}
+			resp := &pb.Resp_MrtEta{Data: []byte(val.Val())}
+			if err := stream.Send(resp); err != nil {
+				log.Printf("[gRPC] action=mrt_live event=send_failed error=%v", err)
+				return err
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
 	}
-	if err := stream.Send(resp); err != nil {
-		log.Printf("[gRPC] action=mrt_live event=send_failed error=%v", err)
-		return err
-	}
-	defer func(sub *redis.PubSub) {
-		_ = sub.Close()
-	}(sub)
 	for {
 		select {
 		case <-stream.Context().Done():

@@ -163,6 +163,23 @@ type raw_thsr_timetable struct {
 		DepartureTime string `json:"DepartureTime"`
 	} `json:"StopTimes"`
 }
+type raw_thsr_availableseatstatus struct {
+	TrainDate string `json:"TrainDate"`
+	Items     []struct {
+		TrainNo           string `json:"TrainNo"`
+		Direction         uint8  `json:"Direction"`
+		OriginStationID   string `json:"OriginStationID"`
+		OriginStationName struct {
+			ZhTw string `json:"Zh_tw"`
+		} `json:"OriginStationName"`
+		DestinationStationID   string `json:"DestinationStationID"`
+		DestinationStationName struct {
+			ZhTw string `json:"Zh_tw"`
+		} `json:"DestinationStationName"`
+		StandardSeatStatus string `json:"StandardSeatStatus"`
+		BusinessSeatStatus string `json:"BusinessSeatStatus"`
+	} `json:"Items"`
+}
 
 func tra_price(start, end string, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
 	arr := []*models.TraFareItem{}
@@ -348,8 +365,6 @@ func tra_timetable(start, end string, date time.Time, ctx context.Context, clien
 func thsr_timetable(start, end string, date time.Time, ctx context.Context, client *resty.Client, db *pgxpool.Pool, rc *redis.Client) {
 	mp := make(map[string]*models.ThsaTimetable)
 	arr := []*models.ThsaTimetable{}
-
-	// First pass: collect departure info from start station
 	rows, _ := db.Query(ctx, `SELECT trainno, starting_station_id,starting_station_name,ending_station_id,ending_station_name,arrivaltime,note,overnight FROM thsr_timetable WHERE stationid = $1 AND train_date = $2 AND arrivaltime >= $3;`, start, date.Format(time.DateOnly), date.Format(time.TimeOnly))
 	if rows == nil {
 		get_thsr_timetable(ctx, db, client, rc, date.Format(time.DateOnly))
@@ -637,6 +652,50 @@ func get_thsr_timetable(ctx context.Context, db *pgxpool.Pool, client *resty.Cli
 		log.Printf("[RAIL] action=thsr_timetable event=complete reason=no_data")
 	}
 	log.Printf("[RAIL] action=thsr_timetable event=complete")
+}
+func get_thsr_availableseatstatus(client *resty.Client, rc *redis.Client, Date string) {
+	log.Printf("[RAIL] action=thsr_AvailableSeatStatus event=start")
+	dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Rail/THSR/AvailableSeatStatus/Train/OD/TrainDate/%s", Date), "thsr_traindate")
+	if err != nil || !comp {
+		log.Printf("[RAIL] action=thsr_AvailableSeatStatus event=skip reason=api_error")
+		return
+	}
+	defer flipopen()
+	if _, err := dec.Token(); err != nil {
+		log.Printf("[RAIL] action=thsr_AvailableSeatStatus event=decode_error error=%v", err)
+		return
+	}
+	row := make(map[string]*models.ThsrAvailableSeats)
+	for dec.More() {
+		var temp raw_thsr_availableseatstatus
+		if err := dec.Decode(&temp); err == nil {
+			for _, stop := range temp.Items {
+				row[stop.TrainNo].Segments = append(row[stop.TrainNo].Segments, &models.ThsrSeatSegment{
+					OriginStationId:      stop.OriginStationID,
+					DestinationStationId: stop.DestinationStationID,
+					StandardSeatStatus:   stop.StandardSeatStatus,
+					BusinessSeatStatus:   stop.BusinessSeatStatus,
+				})
+			}
+		}
+	}
+	pipe := rc.Pipeline()
+	count := 0
+	for trainNo, seats := range row {
+		pb, err := proto.Marshal(seats)
+		if err != nil {
+			continue
+		}
+		key := fmt.Sprintf("thsr_seats:%s:%s", Date, trainNo)
+		pipe.Set(key, pb, 15*time.Minute)
+		pipe.Publish(key, string(pb))
+		count++
+	}
+	if _, err = pipe.Exec(); err != nil {
+		log.Printf("[THSR_SEATS] action=thsr_AvailableSeatStatus event=redis_error error=%v", err)
+	} else {
+		log.Printf("[THSR_SEATS] action=thsr_AvailableSeatStatus event=success train_count=%d", count)
+	}
 }
 
 func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*json.Decoder, bool, error, func()) {

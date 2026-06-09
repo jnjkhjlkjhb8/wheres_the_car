@@ -3,6 +3,7 @@ option go_package = "github.com/jnjkhjlkjhb8/wheres_the_car/models";
 service Thsr_timetable_service{
   rpc fare(Ask_Thsr) returns (thsa_fare) {}
   rpc timetable(Ask_Thsr) returns (thsr_timetables) {}
+  rpc available_seats(Ask_Thsr) returns (stream Resp_thsr_seats) {}
 }
 service Thsr_Detain_service{
   rpc stops(thsr_ask_detain) returns (thsr_stoptimes) {}
@@ -56,4 +57,17 @@ message thsa_timetable{
   string Starting_Time = 12;
   string Ending_Time = 13;
   string Travel_Time = 14;
+}
+message thsr_seat_segment {
+  string origin_station_id = 1;
+  string destination_station_id = 2;
+  string standard_seat_status = 3;
+  string business_seat_status = 4;
+}
+message thsr_available_seats {
+  string train_no = 1;
+  repeated thsr_seat_segment segments = 3;
+}
+message Resp_thsr_seats {
+  bytes data = 1;
 }

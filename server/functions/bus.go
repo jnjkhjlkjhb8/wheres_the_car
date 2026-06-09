@@ -49,13 +49,31 @@ type rawBusRoute struct {
 	DestinationStopNameZh string `json:"DestinationStopNameZh"`
 	SubRoutes             []struct {
 		SubRouteUID  string `json:"SubRouteUID"`
+		SubRouteID   string `json:"SubRouteID"`
 		SubRouteName struct {
 			Zhtw string `json:"Zh_tw"`
 		} `json:"SubRouteName"`
 		Direction             uint8  `json:"Direction"`
 		DepartureStopNameZh   string `json:"DepartureStopNameZh,omitempty"`
 		DestinationStopNameZh string `json:"DestinationStopNameZh,omitempty"`
+		FirstBusTime          string `json:"FirstBusTime"`
+		LastBusTime           string `json:"LastBusTime"`
+		HolidayFirstBusTime   string `json:"HolidayFirstBusTime"`
+		HolidayLastBusTime    string `json:"HolidayLastBusTime"`
 	} `json:"SubRoutes"`
+}
+type rawBusFare struct {
+	RouteID         string `json:"RouteID"`
+	SubRouteID      string `json:"SubRouteID"`
+	FarePricingType uint8  `json:"FarePricingType"`
+	IsFreeBus       uint8  `json:"IsFreeBus"`
+	SectionFares    []struct {
+		Fares []struct {
+			TicketType uint8 `json:"TicketType"`
+			FareClass  uint8 `json:"FareClass"`
+			Price      int32 `json:"Price"`
+		} `json:"Fares"`
+	} `json:"SectionFares"`
 }
 type rawStopofroute struct {
 	RouteUID    string `json:"RouteUID"`
@@ -83,6 +101,7 @@ type rawBusDailytimetable struct {
 		IsLowFloor bool   `json:"IsLowFloor"`
 		StopTimes  []struct {
 			StopSequence  int    `json:"StopSequence"`
+			StopUID       string `json:"StopUID"`
 			ArrivalTime   string `json:"ArrivalTime"`
 			DepartureTime string `json:"DepartureTime"`
 		} `json:"StopTimes"`
@@ -203,6 +222,7 @@ type rawBusStation struct {
 func busStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	dailyRoute(ctx, rc, client, db)
 	busDailyroute(client, rc)
+	busFare(ctx, client, rc, db)
 }
 func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxpool.Pool) {
 	log.Printf("[BUS] action=dailyRoute event=start")
@@ -213,6 +233,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_start", city)
 		subRoutemap := make(map[string]*models.BusSubroute)
 		routeMap := make(map[string][]string)
+		syncStart := time.Now()
 		_, err := db.Exec(ctx, "DELETE FROM raw_bus_route WHERE destin = $1 OR depart = $1", city)
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
@@ -250,6 +271,10 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				subRoutemap[uid].Directions[int32(dir)] = &models.Direction{
 					DepartureStopName:   dep,
 					DestinationStopName: dest,
+					FirstBusTime:        sub.FirstBusTime,
+					LastBusTime:         sub.LastBusTime,
+					HolidayFirstBusTime: sub.HolidayFirstBusTime,
+					HolidayLastBusTime:  sub.HolidayLastBusTime,
 				}
 				routeMap[r.RouteUID] = append(routeMap[r.RouteUID], uid)
 			}
@@ -339,7 +364,16 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
 		saveschedule(ctx, db, city)
+		if _, delErr := db.Exec(ctx, `DELETE FROM bus_station_stop_map WHERE sub_route_uid LIKE $1`, citymap[city]+"%"); delErr != nil {
+			log.Printf("[BUS] action=dailyRoute city=%s event=delete_stop_map_error error=%v", city, delErr)
+		}
 		savestatictodb(ctx, db, &subRoutemap)
+		if _, delErr := db.Exec(ctx, `DELETE FROM bus_subroutes WHERE city = $1 AND updated_at < $2`, city, syncStart); delErr != nil {
+			log.Printf("[BUS] action=dailyRoute city=%s event=delete_stale_subroutes_error error=%v", city, delErr)
+		}
+		if _, delErr := db.Exec(ctx, `DELETE FROM bus_static WHERE city = $1 AND updated_at < $2`, city, syncStart); delErr != nil {
+			log.Printf("[BUS] action=dailyRoute city=%s event=delete_stale_static_error error=%v", city, delErr)
+		}
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_raw_error error=%v", city, err)
 		}
@@ -420,8 +454,8 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 					   FROM jsonb_array_elements(rawstop) AS s
 				   ),schedule
 			FROM temp_bus 
-			ON CONFLICT (sub_route_uid, direction) 
-			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule;
+			ON CONFLICT (sub_route_uid, direction)
+			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule,updated_at = NOW();
 			`
 	if _, err := b.Exec(ctx, c1); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=create_temp_error error=%v", err)
@@ -456,6 +490,9 @@ func savestations(ctx context.Context, db *pgxpool.Pool, city string) {
 	}
 }
 func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
+	if _, err := db.Exec(ctx, `DELETE FROM bus_schedule WHERE sub_route_uid LIKE $1`, citymap[city]+"%"); err != nil {
+		log.Printf("[BUS] action=saveschedule city=%s event=delete_old_error error=%v", city, err)
+	}
 	rows, err := db.Query(ctx, `SELECT content FROM raw_bus_route WHERE type = 'Schedule' AND destin = $1`, city)
 	if err != nil {
 		log.Printf("[BUS] action=saveschedule city=%s event=query_error error=%v", city, err)
@@ -837,4 +874,85 @@ func busDailyroute(client *resty.Client, rc *redis.Client) {
 		}()
 	}
 	log.Printf("[bus] action=bus_dailyroute event=complete")
+}
+
+func busFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+	log.Printf("[BUS_FARE] action=bus_fare event=start")
+	for _, city := range cities {
+		if city == "LienchiangCounty" {
+			continue
+		}
+		url := fmt.Sprintf("/v2/Bus/Fare/City/%s", city)
+		if city == "InterCity" {
+			url = fmt.Sprintf("/v2/Bus/Fare/InterCity")
+		}
+		dec, comp, err, flipopen := callApi(client, rc, url, "bus_Fare"+city)
+		if err != nil || !comp {
+			log.Printf("[BUS_FARE] action=bus_fare city=%s event=skip reason=api_error", city)
+			continue
+		}
+		func() {
+			defer flipopen()
+			if _, err := dec.Token(); err != nil {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=decode_error error=%v", city, err)
+				return
+			}
+			pre := citymap[city]
+			var row [][]interface{}
+			for dec.More() {
+				var f rawBusFare
+				if err := dec.Decode(&f); err != nil {
+					continue
+				}
+				if f.SubRouteID == "" {
+					continue
+				}
+				uid := pre + f.SubRouteID
+				sf, _ := json.Marshal(f.SectionFares)
+				row = append(row, []interface{}{uid, int16(f.FarePricingType), f.IsFreeBus == 1, sf})
+			}
+			if len(row) == 0 {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=skip reason=no_data", city)
+				return
+			}
+			c1 := `CREATE TEMP TABLE temp_fare (
+						uid text,
+						pt smallint,
+						free bool,
+						sf jsonb
+					) ON COMMIT DROP`
+			c2 := `INSERT INTO bus_fares (
+						sub_route_uid, 
+						fare_pricing_type,
+						is_free_bus,
+						section_fares,
+						updated_at
+					)
+					SELECT uid, pt, free, sf, NOW() FROM temp_fare
+					ON CONFLICT (sub_route_uid) DO UPDATE SET fare_pricing_type = EXCLUDED.fare_pricing_type, is_free_bus = EXCLUDED.is_free_bus, section_fares = EXCLUDED.section_fares, updated_at = NOW()`
+			b, err := db.Begin(ctx)
+			if err != nil {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=begin_error error=%v", city, err)
+				return
+			}
+			defer func(b pgx.Tx, ctx context.Context) { _ = b.Rollback(ctx) }(b, ctx)
+			if _, err := b.Exec(ctx, c1); err != nil {
+				return
+			}
+			if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_fare"}, []string{"uid", "pt", "free", "sf"}, pgx.CopyFromRows(row)); err != nil {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=copyfrom_error error=%v", city, err)
+				return
+			}
+			if _, err := b.Exec(ctx, c2); err != nil {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=insert_error error=%v", city, err)
+				return
+			}
+			if err := b.Commit(ctx); err != nil {
+				log.Printf("[BUS_FARE] action=bus_fare city=%s event=commit_error error=%v", city, err)
+				return
+			}
+			log.Printf("[BUS_FARE] action=bus_fare city=%s event=success row_count=%d", city, len(row))
+		}()
+	}
+	log.Printf("[BUS_FARE] action=bus_fare event=complete")
 }

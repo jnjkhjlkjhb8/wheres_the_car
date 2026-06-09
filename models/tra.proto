@@ -89,6 +89,7 @@ message tra_LiveBoard{
   string scheduled_arrival_time = 8;
   string scheduled_departure_time = 9;
   int32 delay = 10;
+  int32 trip_line = 11;
 }
 message tra_LiveBoards{
   string station_id = 1;

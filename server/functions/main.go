@@ -77,9 +77,9 @@ func main() {
 		if sleepingwhiledailyupdate() {
 			return
 		}
-		log.Println("[crontab] action=bike event=start")
+		log.Println("[crontab] action=mrt event=start")
 		mrtEta(c, rc)
-		log.Println("[crontab] action=bike event=end")
+		log.Println("[crontab] action=mrt event=end")
 	})
 	r.Start()
 	defer r.Stop()
@@ -435,13 +435,16 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		}
 	}
 }
-func mask(mon, tues, wed, thur, fri, satur, sun bool) uint8 {
+func mask(mon, tues, wed, thur, fri, satur, sun bool, nationalHoliday ...bool) uint8 {
 	var res uint8
 	days := []bool{mon, tues, wed, thur, fri, satur, sun}
 	for i, v := range days {
 		if v {
 			res |= 1 << i
 		}
+	}
+	if len(nationalHoliday) > 0 && nationalHoliday[0] {
+		res |= 1 << 7
 	}
 	return res
 }
@@ -455,7 +458,6 @@ func mask2(mon, tues, wed, thur, fri, satur, sun uint8) uint8 {
 	}
 	return res
 }
-
 func sleepingwhiledailyupdate() bool {
 	now := time.Now()
 	return now.Hour() == 3 && now.Minute() < 30

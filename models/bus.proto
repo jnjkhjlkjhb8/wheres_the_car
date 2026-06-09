@@ -4,6 +4,7 @@ service Bus_Route_Service{
   rpc static(Bus_Ask_Route) returns (Resp_Bus_static) {}
   rpc daily(Bus_Ask_Route) returns (Resp_Bus_daily_timetable) {}
   rpc eta(Bus_Ask_Route) returns (stream Resp_Bus_eta) {}
+  rpc fare(Bus_Ask_Route) returns (Bus_Fare) {}
 }
 service Bus_Station_Service{
   rpc eta(Bus_Ask_Route) returns (stream Resp_Bus_eta) {}
@@ -41,6 +42,10 @@ message Direction{
   string Geometry = 3;
   repeated Bus_stop Stops = 4;
   repeated Bus_Schedule Schedules = 5;
+  string first_bus_time = 6;
+  string last_bus_time = 7;
+  string holiday_first_bus_time = 8;
+  string holiday_last_bus_time = 9;
 }
 
 message Bus_stop{
@@ -140,4 +145,11 @@ message temp_StopTimes{
   int32 StopSequence = 1;
   string ArrivalTime = 2;
   string DepartureTime = 3;
+  string StopUID = 4;
+}
+message Bus_Fare {
+  string sub_route_uid = 1;
+  int32 fare_pricing_type = 2;
+  bool is_free_bus = 3;
+  bytes section_fares_json = 4;
 }

@@ -177,12 +177,15 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 						temp.DestinationStationName.ZhTw,
 						temp.FirstTrainTime,
 						temp.LastTrainTime,
-						mask(temp.ServiceDay.Monday, temp.ServiceDay.Tuesday, temp.ServiceDay.Wednesday, temp.ServiceDay.Thursday, temp.ServiceDay.Friday, temp.ServiceDay.Saturday, temp.ServiceDay.Sunday),
+						mask(temp.ServiceDay.Monday, temp.ServiceDay.Tuesday, temp.ServiceDay.Wednesday, temp.ServiceDay.Thursday, temp.ServiceDay.Friday, temp.ServiceDay.Saturday, temp.ServiceDay.Sunday, temp.ServiceDay.NationalHolidays),
 						system,
 					})
 				}
 			}
 			if len(row) > 0 {
+				if _, delErr := db.Exec(ctx, `DELETE FROM mrt_firstlast WHERE system = $1`, system); delErr != nil {
+					log.Printf("[MRT] action=getmrt_firstlast system=%s event=delete_old_error error=%v", system, delErr)
+				}
 				c1 := `CREATE TEMP TABLE temp_mrt (
                                id text,
                                lid text,
@@ -274,7 +277,8 @@ func mrtEta(client *resty.Client, rc *redis.Client) {
 					if err != nil {
 						continue
 					}
-					pipe.Set(fmt.Sprintf("mrt_live:%s:%s", system, temp.StationID), pb, 2*time.Minute)
+					pipe.Set(fmt.Sprintf("mrt_live:%s:%s:%s", system, temp.StationID, temp.LineID), pb, 2*time.Minute)
+					pipe.Publish(fmt.Sprintf("mrt_live:%s:%s", system, temp.StationID), string(pb))
 				}
 			}
 			_, _ = pipe.Exec()

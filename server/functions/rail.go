@@ -80,27 +80,6 @@ type TraLiveboard struct {
 	SrcUpdateTime          string `json:"SrcUpdateTime"`
 }
 
-/*type thsr_availableseatstatuslist struct {
-	AvailableSeats []struct {
-		TrainNo           string `json:"TrainNo"`
-		Direction         bool   `json:"Direction"`
-		StationID         string `json:"StationID"`
-		DepartureTime     string `json:"DepartureTime"`
-		EndingStationID   string `json:"EndingStationID"`
-		EndingStationName struct {
-			ZhTw string `json:"Zh_tw"`
-		} `json:"EndingStationName"`
-		StopStations []struct {
-			StationID   string `json:"StationID"`
-			StationName struct {
-				ZhTw string `json:"Zh_tw"`
-			}
-			StandardSeatStatus string `json:"StandardSeatStatus"`
-			BusinessSeatStatus string `json:"BusinessSeatStatus"`
-		} `json:"StopStations"`
-	} `json:"AvailableSeats"`
-}*/
-
 func railStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	log.Printf("[RAIL] action=rail_static event=start")
 	traStation(ctx, client, rc, db)
@@ -416,6 +395,7 @@ func traEta(client *resty.Client, rc *redis.Client) {
 					ScheduledArrivalTime:   temp.ScheduledArrivalTime,
 					ScheduledDepartureTime: temp.ScheduledDepartureTime,
 					Delay:                  int32(temp.DelayTime),
+					TripLine:               int32(temp.TripLine),
 				}
 				res[temp.StationID] = append(res[temp.StationID], pb)
 			}
