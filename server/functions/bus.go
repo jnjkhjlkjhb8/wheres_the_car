@@ -810,11 +810,17 @@ func busDailyroute(client *resty.Client, rc *redis.Client) {
 	log.Printf("[bus] action=bus_dailyroute event=start")
 	var temp rawBusDailytimetable
 	for _, city := range cities {
-		if city == "Taipei" || city == "NewTaipei" || city == "Tainan" {
+		if city == "Taipei" || city == "NewTaipei" || city == "Tainan" || city == "KinmenCounty" || city == "LienchiangCounty" {
 			continue
 		}
+		var url string
+		if city == "InterCity" {
+			url = fmt.Sprintf("/v2/Bus/DailyTimeTable/InterCity")
+		} else {
+			url = fmt.Sprintf("/v2/Bus/DailyTimeTable/City/%s", city)
+		}
 		log.Printf("[bus] action=bus_dailyroute city=%s event=city_start", city)
-		dec, comp, err, flipopen := callApi(client, rc, fmt.Sprintf("/v2/Bus/DailyTimeTable/City/%s", city), "DailyTimeTable"+city)
+		dec, comp, err, flipopen := callApi(client, rc, url, "DailyTimeTable"+city)
 		if err != nil || !comp {
 			log.Printf("[bus] action=bus_dailyroute city=%s event=skip reason=api_error,error=%s", city, err)
 			continue

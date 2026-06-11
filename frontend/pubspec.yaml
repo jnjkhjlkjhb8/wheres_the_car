@@ -95,10 +95,8 @@ flutter:
     - assets/mrt/TRTC/
     - assets/mrt/KRTC/
     - assets/mrt/KLRT/
-  fonts:
-    - family: BianTaoTi
-      fonts:
-        - asset: assets/字魂扁桃體 .ttf
+  #fonts:
+  #    fonts:
   #  - test.json
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
