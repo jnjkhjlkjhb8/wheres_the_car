@@ -152,8 +152,7 @@ func main() {
 		}
 	}(rc)
 	defer db.Close()
-	c.SetAuthToken(getToken(rc, c)).
-		SetBaseURL("https://tdx.transportdata.tw/api/basic").
+	c.SetBaseURL("https://tdx.transportdata.tw/api/basic").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "br,gzip").
 		SetDoNotParseResponse(true).
@@ -165,9 +164,17 @@ func main() {
 				if err != nil {
 					return true
 				}
+				if r.StatusCode() == 401 {
+					rc.Del("TDX_Token")
+					return true
+				}
 				return r.StatusCode() == 429
 			},
-		)
+		).
+		OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+			req.SetAuthToken(getToken(rc))
+			return nil
+		})
 	lis, err := net.Listen("tcp", "0.0.0.0:50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -188,7 +195,8 @@ func main() {
 	pb.RegisterThsr_DetainServiceServer(grpcServer, &Thsr_DetainServer{db: db, client: c, rc: rc})
 	pb.RegisterNear_Station_ServiceServer(grpcServer, &Near_Server{db: db})
 	pb.RegisterAlert_ServiceServer(grpcServer, &AlertServer{rc: rc})
-	go startHTTPServer()
+	pb.RegisterMaasServiceServer(grpcServer, newMaasServer(rc, func() string { return getToken(rc) }))
+	go startHTTPServer(db)
 	log.Printf("gRPC server is running on port %d", 50051)
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
@@ -860,7 +868,7 @@ func (s *Near_Server) FindNear(stream pb.Near_Station_Service_NearServer) error 
 	}
 }
 func makethatsame(subRouteUID string) string {
-	if subRouteUID[0:2] == "THB" {
+	if len(subRouteUID) >= 3 && subRouteUID[:3] == "THB" {
 		temp := subRouteUID[len(subRouteUID)-2:]
 		if temp == "01" {
 			return subRouteUID[:len(subRouteUID)-2]

@@ -15,41 +15,41 @@ import (
 
 type BikeSations struct {
 	StationUid string  `db:"station_uid"`
-	name       string  `db:"name"`
-	city       string  `db:"city"`
-	geom       string  `db:"geom"`
+	Name       string  `db:"name"`
+	City       string  `db:"city"`
+	Distance   float64 `db:"distance"`
 	Lon        float64 `db:"lon"`
 	Lat        float64 `db:"lat"`
 }
 type BusStations struct {
 	StationUid string  `db:"station_uid"`
-	name       string  `db:"station_name"`
-	city       string  `db:"city"`
-	geom       string  `db:"position"`
+	Name       string  `db:"station_name"`
+	City       string  `db:"city"`
+	Distance   float64 `db:"distance"`
 	Lon        float64 `db:"lon"`
 	Lat        float64 `db:"lat"`
 }
 type MrtSations struct {
 	StationUid string  `db:"station_id"`
-	name       string  `db:"name"`
-	system     string  `db:"system"`
-	geom       string  `db:"stationposition"`
+	Name       string  `db:"name"`
+	City       string  `db:"city"`
+	Distance   float64 `db:"distance"`
 	Lon        float64 `db:"lon"`
 	Lat        float64 `db:"lat"`
 }
 type TraStations struct {
 	StationUid string  `db:"station_id"`
-	name       string  `db:"name"`
-	city       string  `db:"city"`
-	geom       string  `db:"geom"`
+	Name       string  `db:"name"`
+	City       string  `db:"city"`
+	Distance   float64 `db:"distance"`
 	Lon        float64 `db:"lon"`
 	Lat        float64 `db:"lat"`
 }
 type Thsrstations struct {
 	StationUid string  `db:"station_id"`
-	name       string  `db:"name"`
-	city       string  `db:"city"`
-	geom       string  `db:"geom"`
+	Name       string  `db:"name"`
+	City       string  `db:"city"`
+	Distance   float64 `db:"distance"`
 	Lon        float64 `db:"lon"`
 	Lat        float64 `db:"lat"`
 }
@@ -81,8 +81,8 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 				var ids []string
 				mp := make(map[string]int)
 				for _, r := range row {
-					if !visit[r.name] {
-						visit[r.name] = true
+					if !visit[r.Name] {
+						visit[r.Name] = true
 						arr = append(arr, fmt.Sprintf("%f,%f", r.Lon, r.Lat))
 						ids = append(ids, fmt.Sprintf("%d", cnt))
 						mp[r.StationUid] = cnt - 1
@@ -98,7 +98,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
+					Get(fmt.Sprintf("http://osrm:5000/table/v1/foot/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -111,18 +111,18 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					ns := &models.NearStation{
 						Type:        1,
 						StationID:   temp.StationUid,
-						StationName: temp.name,
-						City:        temp.city,
+						StationName: temp.Name,
+						City:        temp.City,
 						PositionLon: temp.Lon,
 						PositionLat: temp.Lat,
 						Walk:        walk,
 					}
-					if _, ok := busres[temp.name]; !ok {
-						busres[temp.name] = &models.ArrayNear{
+					if _, ok := busres[temp.Name]; !ok {
+						busres[temp.Name] = &models.ArrayNear{
 							NearStations: []*models.NearStation{},
 						}
 					}
-					busres[temp.name].NearStations = append(busres[temp.name].NearStations, ns)
+					busres[temp.Name].NearStations = append(busres[temp.Name].NearStations, ns)
 				}
 				res.NearBusStations = busres
 			}()
@@ -154,7 +154,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
+					Get(fmt.Sprintf("http://osrm:5000/table/v1/foot/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -167,8 +167,8 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					bikeres = append(bikeres, &models.NearStation{
 						Type:        2,
 						StationID:   temp.StationUid,
-						StationName: temp.name,
-						City:        temp.city,
+						StationName: temp.Name,
+						City:        temp.City,
 						PositionLon: temp.Lon,
 						PositionLat: temp.Lat,
 						Walk:        walk,
@@ -204,7 +204,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
+					Get(fmt.Sprintf("http://osrm:5000/table/v1/foot/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -215,10 +215,10 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 						walk = int32(osrmresp.Durations[0][osrmIdx] / 60)
 					}
 					mrtres = append(mrtres, &models.NearStation{
-						Type:        2,
+						Type:        3,
 						StationID:   temp.StationUid,
-						StationName: temp.name,
-						City:        temp.system,
+						StationName: temp.Name,
+						City:        temp.City,
 						PositionLon: temp.Lon,
 						PositionLat: temp.Lat,
 						Walk:        walk,
@@ -254,7 +254,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
+					Get(fmt.Sprintf("http://osrm:5000/table/v1/foot/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -265,10 +265,10 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 						walk = int32(osrmresp.Durations[0][osrmIdx] / 60)
 					}
 					trares = append(trares, &models.NearStation{
-						Type:        2,
+						Type:        4,
 						StationID:   temp.StationUid,
-						StationName: temp.name,
-						City:        temp.city,
+						StationName: temp.Name,
+						City:        temp.City,
 						PositionLon: temp.Lon,
 						PositionLat: temp.Lat,
 						Walk:        walk,
@@ -304,7 +304,7 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 					SetQueryParam("sources", "0").
 					SetQueryParam("destinations", c2).
 					SetResult(&osrmresp).
-					Get(fmt.Sprintf("http://127.0.0.1/%s", c1))
+					Get(fmt.Sprintf("http://osrm:5000/table/v1/foot/%s", c1))
 				if err == nil && resp.IsSuccess() && osrmresp.Code == "Ok" && len(osrmresp.Durations) > 0 {
 					yes = true
 				}
@@ -315,10 +315,10 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 						walk = int32(osrmresp.Durations[0][osrmIdx] / 60)
 					}
 					thsrres = append(thsrres, &models.NearStation{
-						Type:        2,
+						Type:        5,
 						StationID:   temp.StationUid,
-						StationName: temp.name,
-						City:        temp.city,
+						StationName: temp.Name,
+						City:        temp.City,
 						PositionLon: temp.Lon,
 						PositionLat: temp.Lat,
 						Walk:        walk,

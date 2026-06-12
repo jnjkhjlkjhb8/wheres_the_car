@@ -349,7 +349,8 @@ func traEta(client *resty.Client, rc *redis.Client) {
 					}
 				}
 				bytes, _ := proto.Marshal(data)
-				pipe.Set("tra:delay_all", bytes, 3*time.Minute)
+				pipe.Set("tra:delay:all", bytes, 3*time.Minute)
+				pipe.Publish("tra:delay:all", string(bytes))
 				pipe.Expire("tra:delay", 3*time.Minute)
 				_, pipErr := pipe.Exec()
 				if pipErr != nil {

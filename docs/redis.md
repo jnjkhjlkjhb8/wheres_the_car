@@ -60,8 +60,8 @@ made by claude
 - MRT LiveBoard
   - `mrt_live:*`：120 秒
 - TRA Delay/LiveBoard
-  - `tra:delay_all`：180 秒
-  - `tra:delay`：180 秒
+  - `tra:delay:all`：180 秒  ← Pub/Sub channel（A5 已修正 _all → :all）
+  - `tra:delay`：180 秒（hash，trainNo → delay 秒數）
   - `tra:liveboard:*`：180 秒
 - Bus DailyTimetable
   - `bus_daily_timetable:*`：23.5 小時
@@ -80,3 +80,5 @@ made by claude
   - `THSR_timetable:*`：1 小時
   - `TRA_Stoptimes:*`：1 小時
   - `THSR_Stoptimes:*`：1 小時
+- MaaS 路程規劃快取
+  - `maas:plan:{sha256_hex8}`：90 秒

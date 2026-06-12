@@ -29,8 +29,7 @@ func main() {
 		}
 	}(rc)
 	defer db.Close()
-	c.SetAuthToken(getToken(rc, c)).
-		SetBaseURL("https://tdx.transportdata.tw/api/basic").
+	c.SetBaseURL("https://tdx.transportdata.tw/api/basic").
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "br,gzip").
 		SetDoNotParseResponse(true).
@@ -42,9 +41,17 @@ func main() {
 				if err != nil {
 					return true
 				}
+				if r.StatusCode() == 401 {
+					rc.Del("TDX_Token")
+					return true
+				}
 				return r.StatusCode() == 429
 			},
-		)
+		).
+		OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+			req.SetAuthToken(getToken(rc))
+			return nil
+		})
 	busDailyroute(c, rc)
 	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
@@ -264,33 +271,37 @@ func connectdb() *pgxpool.Pool {
 	log.Printf("[DB] action=connect event=success")
 	return conn
 }
-func getToken(rc *redis.Client, c *resty.Client) string {
-	val, err := rc.Get("TDX_Token").Result()
-	if err != nil {
-		fmt.Println("Token eq Empty")
-		resp, err := c.R().
-			SetHeader("content-type", "application/x-www-form-urlencoded").
-			SetFormData(map[string]string{
-				"grant_type":    "client_credentials",
-				"client_id":     os.Getenv("TDX_CLIENT_ID"),
-				"client_secret": os.Getenv("TDX_CLIENT_SECRET"),
-			}).
-			Post("https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token")
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		var mp map[string]interface{}
-		err = json.Unmarshal([]byte(resp.String()), &mp)
-		val = mp["access_token"].(string)
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		err = rc.Set("TDX_Token", val, 6*time.Hour).Err()
-		if err != nil {
-			fmt.Println(err.Error())
-		}
+func getToken(rc *redis.Client) string {
+	if val, err := rc.Get("TDX_Token").Result(); err == nil && val != "" {
+		return val
 	}
-	return val
+	authClient := resty.New()
+	resp, err := authClient.R().
+		SetHeader("content-type", "application/x-www-form-urlencoded").
+		SetFormData(map[string]string{
+			"grant_type":    "client_credentials",
+			"client_id":     os.Getenv("TDX_CLIENT_ID"),
+			"client_secret": os.Getenv("TDX_CLIENT_SECRET"),
+		}).
+		Post("https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token")
+	if err != nil {
+		log.Printf("[TDX] token fetch error: %v", err)
+		return ""
+	}
+	var mp map[string]interface{}
+	if err = json.Unmarshal(resp.Body(), &mp); err != nil {
+		log.Printf("[TDX] token parse error: %v", err)
+		return ""
+	}
+	token, ok := mp["access_token"].(string)
+	if !ok || token == "" {
+		log.Printf("[TDX] access_token missing from response")
+		return ""
+	}
+	if err = rc.Set("TDX_Token", token, 6*time.Hour).Err(); err != nil {
+		log.Printf("[TDX] token cache error: %v", err)
+	}
+	return token
 }
 func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
 	var target string

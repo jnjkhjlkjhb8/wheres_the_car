@@ -5,8 +5,10 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"log"
 	"math/big"
 	"os"
@@ -14,12 +16,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func startHTTPServer() {
-	key, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+func startHTTPServer(db *pgxpool.Pool) {
+	key, err := loadOrGenerateKey()
 	if err != nil {
-		log.Fatalf("[HTTP] failed to generate RSA key: %v", err)
+		log.Fatalf("[HTTP] failed to load/generate RSA key: %v", err)
 	}
 	log.Printf("[HTTP] RS256 key ready")
 	gin.SetMode(gin.ReleaseMode)
@@ -28,6 +31,7 @@ func startHTTPServer() {
 	r.GET("/api/token/powersync", handleToken(key))
 	r.GET("/api/.well-known/jwks.json", handleJWKS(key))
 	r.POST("/api/embed", handleEmbed())
+	r.GET("/api/search", handleSearch(db))
 	log.Printf("[HTTP] server running on 0.0.0.0:8080")
 	if err := r.Run("0.0.0.0:8080"); err != nil {
 		log.Fatalf("[HTTP] server failed: %v", err)
@@ -110,4 +114,30 @@ func signRS256(key *rsa.PrivateKey, claims map[string]any) (string, error) {
 func b64j(v any) string {
 	b, _ := json.Marshal(v)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func loadOrGenerateKey() (*rsa.PrivateKey, error) {
+	const keyFile = "/tmp/powersync_key.pem"
+	data, err := os.ReadFile(keyFile)
+	if err == nil {
+		block, _ := pem.Decode(data)
+		if block != nil {
+			key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err == nil {
+				log.Printf("[HTTP] loaded persisted RSA key from %s", keyFile)
+				return key, nil
+			}
+		}
+	}
+	key, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	data = pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	_ = os.WriteFile(keyFile, data, 0600)
+	log.Printf("[HTTP] generated new RSA key and persisted to %s", keyFile)
+	return key, nil
 }

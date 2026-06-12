@@ -13,6 +13,7 @@ made by claude
 - Thsr_Detain_service
 - Near_Station_Service
 - Alert_Service
+- MaasService
 
 ## Bus_Route_Service (`models/bus.proto`)
 ### static
@@ -220,5 +221,25 @@ made by claude
   - `Radius`
 - 行為
   - 依據座標查詢鄰近站點
-  - 可使用 OSRM 計算步行時間
+  - 使用 OSRM (`http://osrm:5000/table/v1/foot/`) 計算步行時間
+  - `NearStation.Type`：1=Bus, 2=Bike, 3=MRT, 4=TRA, 5=THSR
   - 回傳多種交通型態的集合
+
+## MaasService (`models/maas.proto`)
+### plan
+- RPC：`plan(MaasPlanRequest) -> MaasPlanResponse`
+- 輸入
+  - `fromLat`, `fromLon`：起點 WGS-84 座標
+  - `toLat`, `toLon`：終點 WGS-84 座標
+  - `date`：YYYY-MM-DD
+  - `time`：HH:MM:SS
+  - `arriveBy`：true=到達時間，false=出發時間（預設）
+- 行為
+  - 呼叫 TDX MaaS API (`https://tdx.transportdata.tw/api/maas`)
+  - `singleflight` 去重並發請求
+  - 結果快取至 Redis (`maas:plan:{hash}`) 90 秒
+- 回傳
+  - `Itinerary[]`：每筆含 duration(秒)、transfers、legs[]
+  - `Leg.mode`：WALK/BUS/SUBWAY/RAIL/TRAM/FERRY
+- Redis key
+  - `maas:plan:{sha256_hex8}` TTL 90 s
