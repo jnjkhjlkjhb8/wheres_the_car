@@ -75,11 +75,10 @@ func handleEmbed() gin.HandlerFunc {
 			return
 		}
 		client := resty.New().
-			SetHeader("Content-Type", "application/json").
-			SetAuthToken(os.Getenv("HF_TOKEN"))
+			SetHeader("Content-Type", "application/json")
 		resp, err := client.R().
 			SetBody(map[string][]string{"inputs": {req.Text}}).
-			Post("https://router.huggingface.co/hf-inference/models/BAAI/bge-large-zh-v1.5/pipeline/feature-extraction")
+			Post("http://embed:8082/embed")
 		if err != nil {
 			log.Printf("[HTTP] embed request failed: %v", err)
 			c.JSON(500, gin.H{"error": "embed failed"})

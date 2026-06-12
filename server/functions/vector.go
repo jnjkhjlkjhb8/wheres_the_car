@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"os"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -323,21 +322,17 @@ func zip(vector []float32) []byte {
 }
 func callhf(input []string) ([]byte, bool, error, func()) {
 	client := resty.New().
-		SetHeader("Content-Type", "application/json").
-		SetAuthToken(os.Getenv("HF_TOKEN"))
-	requestBody := Request{
-		Inputs: input,
-	}
+		SetHeader("Content-Type", "application/json")
 	resp, err := client.R().
-		SetBody(requestBody).
-		Post("https://router.huggingface.co/hf-inference/models/BAAI/bge-large-zh-v1.5/pipeline/feature-extraction")
+		SetBody(Request{Inputs: input}).
+		Post("http://embed:8082/embed")
 	if err != nil {
 		return nil, false, err, nil
 	}
 	return resp.Body(), true, nil, func() {
 		err := resp.RawResponse.Body.Close()
 		if err != nil {
-			log.Printf("[HF] action=fail-close-response error=%v", err)
+			log.Printf("[embed] action=fail-close-response error=%v", err)
 		}
 	}
 }
