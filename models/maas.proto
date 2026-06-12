@@ -1,0 +1,78 @@
+syntax = "proto3";
+option go_package = "github.com/jnjkhjlkjhb8/wheres_the_car/models";
+
+service MaasService {
+  rpc plan(MaasPlanRequest) returns (MaasPlanResponse) {}
+}
+
+message MaasPlanRequest {
+  double fromLat    = 1;
+  double fromLon    = 2;
+  double toLat      = 3;
+  double toLon      = 4;
+  string date       = 5;
+  string time       = 6;
+  bool   arriveBy   = 7;
+}
+
+message MaasPlanResponse {
+  repeated Route routes = 1;
+}
+
+message Route {
+  int64           travelTime    = 1;
+  string          startTime     = 2;
+  string          endTime       = 3;
+  int32           transfers     = 4;
+  repeated Section sections    = 5;
+}
+
+message Section {
+  string type = 1;
+  Summary travelSummary = 2;
+  Place departure = 3;
+  Place arrival = 4;
+  Transport transport = 5;
+  repeated IntermediateStop intermediateStops = 6;
+  Agency agency = 7;
+}
+
+message Summary {
+  int64 duration = 1;
+  double length = 2;
+}
+
+message Place {
+  string name = 1;
+  string type = 2;
+  Location location = 3;
+  string time = 4;
+}
+
+message Location {
+  double lat = 1;
+  double lng = 2;
+}
+
+message Transport {
+  string mode = 1;
+  string name = 2;
+  string shortName = 3;
+  string longName = 4;
+  string headsign = 5;
+  string category = 6;
+  string routeColor = 7;
+}
+
+message IntermediateStop {
+  string name = 1;
+  Location location = 2;
+  string departureTime = 3;
+}
+
+message Agency {
+  string agencyId = 1;
+  string name = 2;
+  string website = 3;
+  string phone = 4;
+}
