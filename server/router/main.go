@@ -181,8 +181,8 @@ func main() {
 	}
 	rl := newRateLimiter()
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(rateLimitInterceptor(rl, 2, time.Second)),
-		grpc.StreamInterceptor(rateLimitStreamInterceptor(rl, 2, time.Second)),
+		grpc.UnaryInterceptor(rateLimitInterceptor(rl, 30, time.Second)),
+		grpc.StreamInterceptor(rateLimitStreamInterceptor(rl, 30, time.Second)),
 	)
 	pb.RegisterBus_Route_ServiceServer(grpcServer, &BusRouteserver{db: db, rc: rc})
 	pb.RegisterBus_Station_ServiceServer(grpcServer, &BusStationserver{rc: rc})

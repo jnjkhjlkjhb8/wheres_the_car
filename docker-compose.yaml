@@ -39,6 +39,8 @@ services:
       TZ: Asia/Taipei
       GOMEMLIMIT: 200MiB
       REDIS_ADDR: redis:6379
+    volumes:
+      - router_keys:/data
     mem_limit: 256m
     depends_on:
       redis:
@@ -112,3 +114,4 @@ services:
 volumes:
   redis_data:
   embed_models:
+  router_keys:

@@ -116,7 +116,7 @@ func b64j(v any) string {
 }
 
 func loadOrGenerateKey() (*rsa.PrivateKey, error) {
-	const keyFile = "/tmp/powersync_key.pem"
+	const keyFile = "/data/powersync_key.pem"
 	data, err := os.ReadFile(keyFile)
 	if err == nil {
 		block, _ := pem.Decode(data)
