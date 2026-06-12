@@ -4,6 +4,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
+      - TZ=Asia/Taipei
       - redis_data:/data
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     mem_limit: 512m
@@ -18,6 +19,8 @@ services:
       context: .
       dockerfile: server/router/Dockerfile
     image: wheres_the_car-router
+    volumes:
+      - TZ=Asia/Taipei
     ports:
       - "50051:50051"
       - "8080:8080"
@@ -40,6 +43,8 @@ services:
       context: .
       dockerfile: server/functions/Dockerfile
     image: wheres_the_car-functions
+    volumes:
+      - TZ=Asia/Taipei
     env_file: ./docker.env
     environment:
       GOMEMLIMIT: 296MiB
@@ -54,6 +59,7 @@ services:
     ports:
       - "8081:8080"
     volumes:
+      - TZ=Asia/Taipei
       - ./powersync/config.yaml:/config/config.yaml:ro
       - ./powersync/sync-rules.yaml:/config/sync-rules.yaml:ro
     env_file: ./docker.env
@@ -76,6 +82,7 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
+      - TZ=Asia/Taipei
       - ./osrm-data:/data:ro
     command: >
       osrm-routed
