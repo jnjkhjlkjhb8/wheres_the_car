@@ -4,7 +4,6 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - TZ=Asia/Taipei
       - redis_data:/data
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     mem_limit: 512m
@@ -19,13 +18,12 @@ services:
       context: .
       dockerfile: server/router/Dockerfile
     image: wheres_the_car-router
-    volumes:
-      - TZ=Asia/Taipei
     ports:
       - "50051:50051"
       - "8080:8080"
     env_file: ./docker.env
     environment:
+      TZ: Asia/Taipei
       GOMEMLIMIT: 200MiB
       REDIS_ADDR: redis:6379
     mem_limit: 256m
@@ -43,10 +41,9 @@ services:
       context: .
       dockerfile: server/functions/Dockerfile
     image: wheres_the_car-functions
-    volumes:
-      - TZ=Asia/Taipei
     env_file: ./docker.env
     environment:
+      TZ: Asia/Taipei
       GOMEMLIMIT: 296MiB
       REDIS_ADDR: redis:6379
     mem_limit: 350m
@@ -59,11 +56,11 @@ services:
     ports:
       - "8081:8080"
     volumes:
-      - TZ=Asia/Taipei
       - ./powersync/config.yaml:/config/config.yaml:ro
       - ./powersync/sync-rules.yaml:/config/sync-rules.yaml:ro
     env_file: ./docker.env
     environment:
+      TZ: Asia/Taipei
       POWERSYNC_CONFIG_PATH: /config/config.yaml
       POWERSYNC_SYNC_RULES_PATH: /config/sync-rules.yaml
       PS_POWERSYNC_JWKS_URL: http://router:8080/api/.well-known/jwks.json
@@ -82,7 +79,6 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
-      - TZ=Asia/Taipei
       - ./osrm-data:/data:ro
     command: >
       osrm-routed
