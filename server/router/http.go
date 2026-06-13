@@ -86,7 +86,11 @@ func handleEmbed() gin.HandlerFunc {
 			c.JSON(500, gin.H{"error": "embed failed"})
 			return
 		}
-		defer resp.RawResponse.Body.Close()
+		if resp.StatusCode() != 200 {
+			log.Printf("[HTTP] ollama returned %d: %s", resp.StatusCode(), resp.Body())
+			c.JSON(502, gin.H{"error": "embed upstream error"})
+			return
+		}
 		var result struct {
 			Embeddings [][]float32 `json:"embeddings"`
 		}

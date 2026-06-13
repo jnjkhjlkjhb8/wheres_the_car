@@ -20,8 +20,10 @@ made by claude
 - `MQTT_USERNAME`
 - `MQTT_PASSWORD`
 
-## HuggingFace
-- `HF_TOKEN`
+## Ollama
+- 不需要額外環境變數，Ollama 作為 Docker 內部服務運行
+- 模型 `qwen3-embedding:0.6b` 於容器啟動時自動下載（首次約需 5 分鐘）
+- 舊的 `HF_TOKEN` 已不再使用
 
 ## HTTP / PowerSync
 - `POWERSYNC_URL`

@@ -2,6 +2,8 @@ services:
   ollama:
     build:
       context: ./embed
+    environment:
+      OLLAMA_HOST: 0.0.0.0
     mem_limit: 800m
     volumes:
       - ollama_data:/root/.ollama

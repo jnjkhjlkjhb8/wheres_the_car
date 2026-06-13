@@ -70,6 +70,19 @@ made by claude
 - 寫入表
   - `tra_stations`, `thsr_stations`
   - `tra_fares`, `thsr_fares`
+- 完成後呼叫 `railPreFetch` 與 `railCleanup`
+
+## railPreFetch（由 railStatic 呼叫）
+- 預抓未來時刻表，每日 03:00 隨 railStatic 一起執行
+- TRA：抓今日 +1 到 +60 天（`/v2/Rail/TRA/DailyTimetable/TrainDate/{date}`）
+- THSR：抓今日 +1 到 +45 天（`/v2/Rail/THSR/DailyTimetable/TrainDate/{date}`）
+- 每個日期使用獨立的 If-Modified-Since cache key（`tra_traindate_{date}`），避免跨日衝突
+- 第一次執行為冷啟動（全量抓取），後續執行大部分回傳 304 不做更新
+- 寫入表：`tra_timetable`、`thsr_timetable`
+
+## railCleanup（由 railStatic 呼叫）
+- 刪除 `train_date < CURRENT_DATE` 的過期時刻表資料
+- 對象：`tra_timetable`、`thsr_timetable`
 
 ## traEta
 - 來源 API
@@ -81,12 +94,8 @@ made by claude
   - `tra:liveboard:{station_id}`
 
 ## tra_timetable / thsr_timetable
-- 來源 API
-  - `/v2/Rail/TRA/DailyTimetable/TrainDate/{Date}`
-  - `/v2/Rail/THSR/DailyTimetable/TrainDate/{Date}`
-- 寫入表
-  - `tra_timetable`
-  - `thsr_timetable`
+- 由 `railPreFetch` 管理（見上方），不再單獨呼叫
+- Router package 中的 `get_tra_timetable` / `get_thsr_timetable` 仍保留供 gRPC 查詢使用，但使用舊的單一 cache key，僅於 router 內部觸發時執行
 
 ## TDX MQTT 訂閱
 
@@ -118,7 +127,10 @@ made by claude
 ## 向量更新 (changetovector)
 - 來源
   - `bus_static`, `bus_stations`, `bike_stations`, `mrt_station`, `tra_stations`, `thsr_stations`
+  - `tra_timetable`（DISTINCT ON trainno，只取未來日期）→ type `tra_train`
+  - `thsr_timetable`（DISTINCT ON trainno，只取未來日期）→ type `thsr_train`
 - 目的表
   - `search_vector`
 - 向量模型
-  - `BAAI/bge-large-zh-v1.5` (HuggingFace)
+  - `qwen3-embedding:0.6b`（Ollama 本機服務，`http://ollama:11434/api/embed`）
+  - 維度：1024，pgvector `vector(1024)` 欄位，HNSW 索引

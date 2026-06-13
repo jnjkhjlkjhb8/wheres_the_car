@@ -39,7 +39,10 @@ made by claude
 
 ### vector
 - `search_vector`
-  - 類型、名稱、城市、幾何資訊與向量
+  - 欄位：`type`, `uid`, `name`, `city`, `depart`, `destin`, `geom`, `embedding vector(1024)`, `updated_at`
+  - 唯一鍵：`(type, uid, city)`
+  - `embedding` 欄位使用 pgvector，HNSW 索引（cosine），取代舊的 `blob bytea`
+  - type 值：`bus_route`, `bus_station`, `bike_station`, `mrt_station`, `tra_station`, `thsr_station`, `tra_train`, `thsr_train`
 
 ## Redis key 格式
 

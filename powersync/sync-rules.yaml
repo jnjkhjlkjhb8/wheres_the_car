@@ -11,13 +11,4 @@ bucket_definitions:
             destin
           FROM bus_static
 
-      - SELECT
-            id,
-            type,
-            uid,
-            city,
-            name,
-            depart,
-            destin,
-            blob
-          FROM search_vector
+

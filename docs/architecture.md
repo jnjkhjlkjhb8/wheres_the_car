@@ -27,6 +27,7 @@ router / functions / powersync / osrm / redis
 | functions | bus-functions (Go) | — | 192 MB |
 | powersync | journeyapps/powersync-service | 8081 | 512 MB |
 | osrm | osrm/osrm-backend | 127.0.0.1:5000 | 1536 MB |
+| ollama | ollama/ollama (custom) | 127.0.0.1:11434 | 800 MB |
 
 Redis 與 OSRM 僅對 localhost 開放，不對外暴露。
 
@@ -48,7 +49,7 @@ Redis 與 OSRM 僅對 localhost 開放，不對外暴露。
 | Azure PostgreSQL | 靜態資料、時刻表、站點、路線等持久化 |
 | TDX REST API | 排程擷取交通靜態與即時資料 |
 | TDX MQTT | 推送式即時告警（`mqtt.transportdata.tw:8883`） |
-| HuggingFace API | 向量嵌入計算（`BAAI/bge-large-zh-v1.5`，server-side） |
+| Ollama (本機) | 向量嵌入計算（`qwen3-embedding:0.6b`，Docker 內部服務） |
 
 ## 資料流
 
@@ -62,7 +63,7 @@ Redis Pub/Sub ──→ router ──gRPC stream──→ Flutter App
 
 PostgreSQL ──→ PowerSync ──sync──→ Flutter SQLite（離線搜尋）
 
-Flutter App ──→ router /api/embed ──→ HuggingFace API ──→ 向量
+Flutter App ──→ router /api/embed ──→ ollama:11434 ──→ 向量
            └──→ router /api/token/powersync ──→ JWT
 ```
 
