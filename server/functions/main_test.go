@@ -1,0 +1,38 @@
+package main
+
+import "testing"
+
+func TestMask(t *testing.T) {
+	got := mask(true, false, true, false, false, false, true)
+	want := uint8((1 << 0) | (1 << 2) | (1 << 6))
+	if got != want {
+		t.Fatalf("mask() = %d, want %d", got, want)
+	}
+}
+
+func TestMask2(t *testing.T) {
+	got := mask2(0, 1, 0, 0, 0, 1, 0)
+	want := uint8((1 << 1) | (1 << 5))
+	if got != want {
+		t.Fatalf("mask2() = %d, want %d", got, want)
+	}
+}
+
+func TestMakeThatSameInterCity(t *testing.T) {
+	uid, dir := makethatsame("InterCity", "THB123401", 9)
+	if uid != "THB1234" || dir != 0 {
+		t.Fatalf("makethatsame() = (%s, %d), want (THB1234, 0)", uid, dir)
+	}
+
+	uid, dir = makethatsame("InterCity", "THB123402", 9)
+	if uid != "THB1234" || dir != 1 {
+		t.Fatalf("makethatsame() = (%s, %d), want (THB1234, 1)", uid, dir)
+	}
+}
+
+func TestMakeThatSameCity(t *testing.T) {
+	uid, dir := makethatsame("Taipei", "TPE1234", 1)
+	if uid != "TPE1234" || dir != 1 {
+		t.Fatalf("makethatsame() = (%s, %d), want (TPE1234, 1)", uid, dir)
+	}
+}

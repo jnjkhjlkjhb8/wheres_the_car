@@ -1,17 +1,17 @@
 services:
-  embed:
+  ollama:
     build:
       context: ./embed
-    mem_limit: 2g
+    mem_limit: 800m
     volumes:
-      - embed_models:/root/.cache/huggingface
+      - ollama_data:/root/.ollama
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health', timeout=5)"]
+      test: ["CMD-SHELL", "ollama list | grep -q qwen3-embedding"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 10
+      start_period: 300s
   redis:
     image: redis:7-alpine
     ports:
@@ -45,7 +45,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      embed:
+      ollama:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -68,7 +68,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      embed:
+      ollama:
         condition: service_healthy
     restart: unless-stopped
   powersync:
@@ -114,5 +114,5 @@ services:
       retries: 3
 volumes:
   redis_data:
-  embed_models:
+  ollama_data:
   router_keys:

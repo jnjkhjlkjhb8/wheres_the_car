@@ -74,25 +74,29 @@ func handleEmbed() gin.HandlerFunc {
 			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
-		client := resty.New().
-			SetHeader("Content-Type", "application/json")
+		client := resty.New().SetHeader("Content-Type", "application/json")
 		resp, err := client.R().
-			SetBody(map[string][]string{"inputs": {req.Text}}).
-			Post("http://embed:8082/embed")
+			SetBody(map[string]interface{}{
+				"model": "qwen3-embedding:0.6b",
+				"input": []string{req.Text},
+			}).
+			Post("http://ollama:11434/api/embed")
 		if err != nil {
 			log.Printf("[HTTP] embed request failed: %v", err)
 			c.JSON(500, gin.H{"error": "embed failed"})
 			return
 		}
 		defer resp.RawResponse.Body.Close()
-		var vecs [][]float32
-		if err := json.Unmarshal(resp.Body(), &vecs); err != nil || len(vecs) == 0 {
+		var result struct {
+			Embeddings [][]float32 `json:"embeddings"`
+		}
+		if err := json.Unmarshal(resp.Body(), &result); err != nil || len(result.Embeddings) == 0 {
 			log.Printf("[HTTP] embed parse failed: %v body=%s", err, resp.Body())
 			c.JSON(500, gin.H{"error": "parse failed"})
 			return
 		}
-		out := make([]float64, len(vecs[0]))
-		for i, f := range vecs[0] {
+		out := make([]float64, len(result.Embeddings[0]))
+		for i, f := range result.Embeddings[0] {
 			out[i] = float64(f)
 		}
 		c.JSON(200, gin.H{"vector": out})
