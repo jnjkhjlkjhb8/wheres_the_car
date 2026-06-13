@@ -53,6 +53,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
   functions:
     build:
       context: .
@@ -82,7 +83,7 @@ services:
       TZ: Asia/Taipei
       POWERSYNC_CONFIG_PATH: /config/config.yaml
       POWERSYNC_SYNC_RULES_PATH: /config/sync-rules.yaml
-      PS_POWERSYNC_JWKS_URL: http://router:8080/api/.well-known/jwks.json
+
     mem_limit: 512m
     depends_on:
       router:

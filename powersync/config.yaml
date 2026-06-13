@@ -8,7 +8,7 @@ storage:
 
 client_auth:
   jwks_uris:
-    - !env PS_POWERSYNC_JWKS_URL
+    - http://router:8080/api/.well-known/jwks.json
 
 sync_rules:
   path: /config/sync-rules.yaml
