@@ -1,10 +1,3 @@
-# PowerSync sync rules
-# Ref: docs/spec/requirements.md §12.4
-#
-# bus_static : exclude pb (large protobuf blob), alias sub_route_uid as id
-# search_vector : exclude geom (PostGIS), include blob (PowerSync transmits bytea as base64 TEXT)
-#                 requires migration 001_add_id_to_search_vector.sql first
-
 bucket_definitions:
   global:
     data:

@@ -1,5 +1,3 @@
-# Ref: https://docs.powersync.com/self-hosting
-
 source:
   type: postgresql
   uri: !env PS_DATABASE_URL
@@ -9,7 +7,7 @@ storage:
   uri: !env PS_DATABASE_URL
 
 client_auth:
-  jwks_urls:
+  jwks_uris:
     - !env PS_POWERSYNC_JWKS_URL
 
 sync_rules:
