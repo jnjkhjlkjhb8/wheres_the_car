@@ -37,10 +37,16 @@ Redis 與 OSRM 僅對 localhost 開放，不對外暴露。
   - 排程執行器，負責擷取 TDX REST API 與寫入 DB/Redis
   - TDX MQTT 訂閱（`mqtt.go`），接收即時告警並推送至 Redis Pub/Sub
   - 使用 `robfig/cron` 設定排程
+  - pgxpool：MaxConns=10，MinConns=2，MaxConnLifetime=30m，MaxConnIdleTime=5m
+  - Redis pool：PoolSize=20，MinIdleConns=3，PoolTimeout=5s
 - `server/router`
   - gRPC 服務端（:50051），查詢 DB/Redis 並回傳 protobuf
   - HTTP 服務端（:8080）：`/api/token/powersync`、`/api/.well-known/jwks.json`、`/api/embed`
-  - 串流以 Redis Pub/Sub 實作
+  - 串流以 Redis Pub/Sub 實作（`sub.Channel()` channel-based，無 busy-loop）
+  - pgxpool：MaxConns=20，MinConns=2，MaxConnLifetime=30m，MaxConnIdleTime=5m
+  - Redis pool：PoolSize=20，MinIdleConns=3，PoolTimeout=5s
+  - process 內 TTL cache（`cache.go`）：`BusRouteStatic` / `BikeStatic` 各快取 1 小時
+  - `Near_Station_Service`：5 種站型以 goroutine 並行查詢；共用單一 `*resty.Client`（OSRM）
 
 ## 外部依賴
 
