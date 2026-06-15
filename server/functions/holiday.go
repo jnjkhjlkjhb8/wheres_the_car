@@ -30,6 +30,10 @@ func loadHolidays() {
 		return
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		log.Printf("[HOLIDAY] fetch error: status=%d — weekday fallback active", resp.StatusCode)
+		return
+	}
 	r := csv.NewReader(resp.Body)
 	r.Read()
 	m := make(map[string]bool)

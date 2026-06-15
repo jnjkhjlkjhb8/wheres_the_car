@@ -53,6 +53,8 @@ func main() {
 			return nil
 		})
 	busDailyroute(c, rc)
+	loadHolidays()
+	loadModel()
 	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
@@ -87,6 +89,17 @@ func main() {
 		log.Println("[crontab] action=mrt event=start")
 		mrtEta(c, rc)
 		log.Println("[crontab] action=mrt event=end")
+	})
+	_, _ = r.AddFunc("@every 10m", func() {
+		weatherSync(rc)
+	})
+	_, _ = r.AddFunc("0 0 4 * * *", func() {
+		ctx := context.Background()
+		computeTravelAvg(ctx, db)
+	})
+	_, _ = r.AddFunc("0 30 4 * * *", func() {
+		ctx := context.Background()
+		cleanupBusHistory(ctx, db)
 	})
 	r.Start()
 	defer r.Stop()
@@ -212,9 +225,12 @@ func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*
 	}
 */
 func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]BusStationmap, error) {
-	query := `SELECT station_id, station_name, sub_route_uid, route_name, direction, stop_uid, stop_sequence 
-              FROM bus_station_stop_map 
-              WHERE sub_route_uid LIKE $1`
+	query := `SELECT bssm.station_id, bssm.station_name, bssm.sub_route_uid, bssm.route_name,
+	                 bssm.direction, bssm.stop_uid, bssm.stop_sequence,
+	                 COALESCE(ST_Y(bs.position), 0), COALESCE(ST_X(bs.position), 0)
+	          FROM bus_station_stop_map bssm
+	          LEFT JOIN bus_stations bs ON bs.station_uid = bssm.station_id
+	          WHERE bssm.sub_route_uid LIKE $1`
 	rows, err := db.Query(ctx, query, city+"%")
 	if err != nil {
 		return nil, err
@@ -223,11 +239,17 @@ func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]BusStati
 	var list []BusStationmap
 	for rows.Next() {
 		var temp BusStationmap
-		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID, &temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence)
+		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID,
+			&temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence,
+			&temp.Lat, &temp.Lon)
 		if err != nil {
 			fmt.Println(err)
+			continue
 		}
 		list = append(list, temp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return list, nil
 }

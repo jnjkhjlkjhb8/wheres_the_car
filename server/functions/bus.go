@@ -183,6 +183,8 @@ type BusStationmap struct {
 	Direction    uint8
 	StopUID      string
 	StopSequence uint8
+	Lat          float64
+	Lon          float64
 }
 
 /*
@@ -730,16 +732,33 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			}
 			busmap[uid] = append(busmap[uid], pb)
 		}
+		totalStops := make(map[string]int)
+		for _, b := range mp {
+			uid, _ := makethatsame(city, b.SubRouteUID, b.Direction)
+			totalStops[uid]++
+		}
+		var weather *weatherData
+		if wjson, wErr := rc.Get("weather:" + city).Result(); wErr == nil {
+			var w weatherData
+			if json.Unmarshal([]byte(wjson), &w) == nil {
+				weather = &w
+			}
+		}
+		now := time.Now().In(taipei)
+		holiday := isHoliday(now)
+		var historyRows [][]interface{}
 		for _, b := range mp {
 			eta, ok := etamap[b.StopUID]
-			now := time.Now()
 			var status uint8
 			var est int32
 			var stime string
 			uid, _ := makethatsame(city, b.SubRouteUID, b.Direction)
 			if ok {
-				temp, _ := time.Parse(time.RFC3339, eta.SrcUpdateTime)
-				est = eta.EstimatedTime - int32(now.Sub(temp).Seconds())
+				if srcT, parseErr := time.Parse(time.RFC3339, eta.SrcUpdateTime); parseErr == nil {
+					est = eta.EstimatedTime - int32(now.Sub(srcT).Seconds())
+				} else {
+					est = eta.EstimatedTime
+				}
 				status = eta.StopStatus
 				stime = eta.SrcUpdateTime
 			} else {
@@ -748,6 +767,65 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			/*if eta.NextBusTime == "" {
 				err = db.QueryRow(ctx, `SELECT ("arrival_time/StartTime" AT TIME ZONE 'Asia/Taipei')::time from bus_schedule WHERE sub_route_uid = $1 AND direction = $2 AND "arrival_time/StartTime" >= CURRENT_TIME ORDER BY "arrival_time/StartTime" ASC LIMIT 1;`, eta.SubRouteUID, eta.Direction).Scan(&eta.NextBusTime)
 			}*/
+			if status == 0 {
+				uid2, _ := makethatsame(city, b.SubRouteUID, b.Direction)
+				ts := totalStops[uid2]
+				var plateNumb *string
+				var busSpeed *int16
+				var busDist *int
+				if buses := busmap[uid]; len(buses) > 0 && b.Lat != 0 {
+					nearest := buses[0]
+					nearestDist := haversine(b.Lat, b.Lon,
+						float64(nearest.PositionLat), float64(nearest.PositionLon))
+					for _, bus := range buses[1:] {
+						d := haversine(b.Lat, b.Lon,
+							float64(bus.PositionLat), float64(bus.PositionLon))
+						if d < nearestDist {
+							nearestDist = d
+							nearest = bus
+						}
+					}
+					pn := nearest.PlateNumb
+					plateNumb = &pn
+					spd := int16(nearest.Speed)
+					busSpeed = &spd
+					dist := int(nearestDist)
+					busDist = &dist
+				}
+				var srcTime *time.Time
+				if stime != "" {
+					if t, err := time.Parse(time.RFC3339, stime); err == nil {
+						srcTime = &t
+					}
+				}
+				var nextBusTimePtr *string
+				if eta.NextBusTime != "" {
+					nbtp := eta.NextBusTime
+					nextBusTimePtr = &nbtp
+				}
+				weatherTemp, weatherPrecip, weatherWind, weatherHumid := interface{}(nil), interface{}(nil), interface{}(nil), interface{}(nil)
+				if weather != nil {
+					weatherTemp = weather.Temperature
+					weatherPrecip = weather.Precipitation
+					weatherWind = weather.WindSpeed
+					weatherHumid = weather.Humidity
+				}
+				historyRows = append(historyRows, []interface{}{
+					b.SubRouteUID, b.StopUID, int16(b.Direction),
+					int16(b.StopSequence), int16(ts), est, nextBusTimePtr, srcTime,
+					city, int16(now.Hour()), int16(now.Weekday()), holiday,
+					weatherTemp, weatherPrecip, weatherWind, weatherHumid,
+					plateNumb, busSpeed, busDist,
+				})
+			}
+			if status == 1 && eta.NextBusTime == "" {
+				uid2, _ := makethatsame(city, b.SubRouteUID, b.Direction)
+				eta.NextBusTime = fillNextBusTime(
+					ctx, db, rc,
+					b.SubRouteUID, int32(b.Direction), b.StopUID, city,
+					int(b.StopSequence), totalStops[uid2], now,
+				)
+			}
 			if _, ok = stations[b.StationName]; !ok {
 				stations[b.StationName] = &models.Bus_StationArrival{
 					StationName: b.StationName,
@@ -803,6 +881,7 @@ func BusEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			log.Printf("[BUS_ETA] action=Bus_eta city=%s event=redis_success station_count=%d route_count=%d eat_count=%d posit_count=%d", city, len(stations), len(routes), len(eat), len(posit))
 		}
 		//savebushistory(ctx, db, eat, posit)
+		saveBusEtaHistory(ctx, db, historyRows)
 	}
 	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }
