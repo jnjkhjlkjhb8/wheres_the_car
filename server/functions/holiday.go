@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const holidayCSVURL = "https://data.gov.tw/api/v2/rest/datastore/MOEA_4.csv"
+const holidayCSVURL = "https://data.ntpc.gov.tw/api/datasets/308dcd75-6434-45bc-a95f-584da4fed251/csv/file"
 
 var holidayMap map[string]bool
 

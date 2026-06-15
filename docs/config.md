@@ -20,11 +20,6 @@ made by claude
 - `MQTT_USERNAME`
 - `MQTT_PASSWORD`
 
-## Ollama
-- 不需要額外環境變數，Ollama 作為 Docker 內部服務運行
-- 模型 `qwen3-embedding:0.6b` 於容器啟動時自動下載（首次約需 5 分鐘）
-- 舊的 `HF_TOKEN` 已不再使用
-
 ## HTTP / PowerSync
 - `POWERSYNC_URL`
   - Flutter build-time dart-define: `--dart-define=POWERSYNC_URL=http://your-debian-server:8080`
@@ -40,3 +35,13 @@ made by claude
 - `POWERSYNC_JWKS_URL`
   - Full URL of Go backend JWKS endpoint, reachable from Debian server
   - e.g. `http://go-server-host:8080/api/.well-known/jwks.json`
+
+## Bus ETA Prediction
+
+- `CWA_API_KEY`
+  - CWA Open Data API 金鑰，申請網址：opendata.cwa.gov.tw
+  - 若留空則略過天氣同步（weatherSync 不執行）
+- `BUS_ETA_MODEL_PATH`
+  - XGBoost 模型檔案路徑
+  - 預設：`./model/bus_eta.json`
+  - 若檔案不存在則僅用班表 + travel avg（無 ML 修正）

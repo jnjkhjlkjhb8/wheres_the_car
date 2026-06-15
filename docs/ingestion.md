@@ -5,6 +5,12 @@ made by claude
 - 每日 03:00
   - 執行 `busStatic`, `bikeStatic`, `mrtStatic`, `railStatic`
   - 執行向量更新 `changetovector`
+- 每日 04:00
+  - 執行 `computeTravelAvg`（公車旅行時間統計）
+- 每日 04:30
+  - 執行 `cleanupBusHistory`（刪除 30 天前的 ETA 歷史）
+- 每 10 分鐘
+  - 執行 `weatherSync`（CWA 天氣資料同步）
 - 每 2 分鐘
   - 執行 `traEta`
 - 每 30 秒
@@ -96,6 +102,49 @@ made by claude
 ## tra_timetable / thsr_timetable
 - 由 `railPreFetch` 管理（見上方），不再單獨呼叫
 - Router package 中的 `get_tra_timetable` / `get_thsr_timetable` 仍保留供 gRPC 查詢使用，但使用舊的單一 cache key，僅於 router 內部觸發時執行
+
+## BusEta（每 30 秒）
+
+各城市以 bounded worker pool（concurrency=4）並行處理。每個城市的 `busstaticmp`（路線站點 map）在首次需要時查 DB 並快取於 process 內，`dailyRoute` 完成後清除快取。
+
+除寫入 Redis 外，每次執行還會：
+
+1. **收集 ETA 歷史**（`stop_status == 0` 的站點）
+   - 使用 `pgx.CopyFrom` 批次寫入 `bus_eta_history`
+   - 包含天氣快照（從 Redis `weather:{city}` 讀取）、最近公車距離（haversine）、假日旗標
+
+2. **填補 NextBusTime 預測**（`stop_status == 1` 且 `NextBusTime == ""`）
+   - 每城市執行前批次查詢：`batchNextDepartures`（`bus_schedule`）和 `batchTravelAvg`（`bus_travel_avg`），不做 per-stop DB 呼叫
+   - 旅行時間無資料時以 `stop_sequence_ratio × max` 估算
+   - 若模型已載入，加上 XGBoost delay 修正值
+   - 結果以 RFC3339 格式填入 proto，由 router 直接傳出
+
+## weatherSync（每 10 分鐘）
+
+同時呼叫兩支 CWA Open Data API，需設定 `CWA_API_KEY`：
+
+| API | 資料集 | 內容 |
+|---|---|---|
+| `O-A0003-001` | 自動氣象站觀測 | 溫度、風速、濕度（各縣市最新一筆觀測站） |
+| `F-B0046-001` | 降水量網格預報 | 降水量（0.0125° 網格，以城市中心座標查格點） |
+
+合併後寫入 Redis `weather:{city}`（15 分鐘 TTL）。
+
+## computeTravelAvg（每日 04:00）
+
+從 `bus_eta_history` 近 7 天的資料偵測 estimate 由正轉負的「抵達事件」，結合 `bus_schedule` 的出發時間，計算各站旅行時間中位數，寫入 `bus_travel_avg`。僅採計 ≥ 10 筆樣本的資料；GTFS 冷啟動種子（`sample_count = 0`）會被觀測資料覆蓋。
+
+## cleanupBusHistory（每日 04:30）
+
+刪除 `bus_eta_history` 中 30 天前的資料（`recorded_at < NOW() - INTERVAL '30 days'`）。
+
+## GTFS 冷啟動（手動執行）
+
+```bash
+DATABASE_URL=... python3 scripts/gtfs_seed.py
+```
+
+從 `temp/gtfs/` 讀取 GTFS 靜態資料，計算各站旅行時間中位數，寫入 `bus_travel_avg`（`sample_count = 0`）。在觀測資料累積前提供 fallback 預測。
 
 ## TDX MQTT 訂閱
 

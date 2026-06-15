@@ -21,7 +21,8 @@ made by claude
 - 輸入
   - `SubRouteUID`：子路線 UID
 - 行為
-  - 查詢 `bus_static` 表
+  - 先查 process 內 TTL cache（key `bus_static:{sub_route_uid}`，TTL 1h）
+  - Miss 時查詢 `bus_static` 表並回寫 cache
   - 回傳 protobuf bytes
 - 依賴
   - PostgreSQL
@@ -61,7 +62,9 @@ made by claude
 - 輸入
   - `StationUID`
 - 行為
-  - 查詢 `bike_stations` 表
+  - 先查 process 內 TTL cache（key `bike_static:{station_uid}`，TTL 1h）
+  - Miss 時查詢 `bike_stations` 表並回寫 cache
+  - 回傳 protobuf bytes
 
 ### eta
 - RPC：`eta(Bike_request) -> stream Resp_Bike_eta`
@@ -101,7 +104,7 @@ made by claude
   - `origin_station_id`
   - `destination_station_id`
 - 行為
-  - Redis 查詢，不存在時觸發 DB/API 更新
+  - Redis 查詢，不存在時以單一 `WHERE stationid = ANY($1) AND train_date = $2 AND arrivaltime >= $3` 同時取起迄站資料，在 Go 側依 `stationid` 分流；仍為空時才呼叫 TDX API
 - Redis key
   - `TRA_timetable:{date}:{origin_station_id}:{destination_station_id}`
 
@@ -160,7 +163,7 @@ made by claude
   - `origin_station_id`
   - `destination_station_id`
 - 行為
-  - Redis 查詢，不存在時觸發 DB/API 更新
+  - Redis 查詢，不存在時以單一 `WHERE stationid = ANY($1) AND train_date = $2` 同時取起迄站資料，在 Go 側依 `stationid` 分流，出發站依時間過濾；仍為空時才呼叫 TDX API
 - Redis key
   - `THSR_timetable:{date}:{origin_station_id}:{destination_station_id}`
 
@@ -220,8 +223,8 @@ made by claude
   - `PositionLat`
   - `Radius`
 - 行為
-  - 依據座標查詢鄰近站點
-  - 使用 OSRM (`http://osrm:5000/table/v1/foot/`) 計算步行時間
+  - 5 種站型（Bus/Bike/MRT/TRA/THSR）以獨立 goroutine 並行查詢，`sync.WaitGroup` 收集結果
+  - OSRM 呼叫（`http://osrm:5000/table/v1/foot/`）使用 server 共用的 `*resty.Client`
   - `NearStation.Type`：1=Bus, 2=Bike, 3=MRT, 4=TRA, 5=THSR
   - 回傳多種交通型態的集合
 

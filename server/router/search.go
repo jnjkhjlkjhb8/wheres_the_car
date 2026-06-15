@@ -85,9 +85,11 @@ func textFallback(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 	rows, err := db.Query(ctx, `
 		SELECT type, uid, name, city, depart, destin
 		FROM search_vector
-		WHERE name  ILIKE '%' || $1 || '%'
+		WHERE name % $1
+		   OR name  ILIKE '%' || $1 || '%'
 		   OR depart ILIKE '%' || $1 || '%'
 		   OR destin ILIKE '%' || $1 || '%'
+		ORDER BY similarity(name, $1) DESC
 		LIMIT $2`,
 		q, limit,
 	)

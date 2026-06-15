@@ -69,7 +69,7 @@ func getbikeStation(ctx context.Context, client *resty.Client, rc *redis.Client,
 				log.Printf("[BIKE] action=getbike_station city=%s event=decode_error error=%v", city, err.Error())
 				return
 			}
-			var row [][]interface{}
+			row := [][]interface{}{}
 			for dec.More() {
 				var temp bikeStation
 				if err := dec.Decode(&temp); err == nil {

@@ -27,6 +27,8 @@ made by claude
   - `mqtt:v2:Bus:RealTimeNearStop:City:{city}:{routeId}`
 
 ## 快取 key
+- Bus ETA Prediction
+  - `weather:{city}`（天氣快照 JSON，`weatherSync` 寫入）
 - Bus
   - `bus_daily_timetable:{sub_route_uid}`
 - TRA
@@ -82,3 +84,5 @@ made by claude
   - `THSR_Stoptimes:*`：1 小時
 - MaaS 路程規劃快取
   - `maas:plan:{sha256_hex8}`：90 秒
+- Bus ETA Prediction
+  - `weather:{city}`：15 分鐘

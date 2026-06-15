@@ -5,8 +5,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Before changing code
 
 - Read `docs/README.md` first to understand the doc index.
-- Read `docs/requirements.md` before any implementation.
-- All changes require a requirements doc update at `docs/requirements.md` and explicit confirmation before implementation.
 - When instructions are unclear, ask first.
 
 ## Commands
@@ -195,3 +193,17 @@ All spec documents are in `docs/`:
 | `docs/config.md` | Environment variables reference |
 | `docs/widgets.md` | Frontend widget module system |
 | `docs/repositories.md` | Frontend repository data layer (gRPC wrappers) |
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `jnjkhjlkjhb8/bus`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo — `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.

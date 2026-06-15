@@ -13,6 +13,95 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type routeDirKey struct {
+	subRouteUID string
+	direction   int32
+}
+
+type travelAvgKey struct {
+	subRouteUID string
+	direction   int32
+	stopUID     string
+	hour        int
+	dayOfWeek   int
+}
+
+func dedupRouteDirPairs(keys []routeDirKey) []routeDirKey {
+	seen := make(map[routeDirKey]bool, len(keys))
+	out := make([]routeDirKey, 0, len(keys))
+	for _, k := range keys {
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+func batchNextDepartures(ctx context.Context, db *pgxpool.Pool, keys []routeDirKey, todTime string) map[routeDirKey]time.Time {
+	out := make(map[routeDirKey]time.Time, len(keys))
+	if len(keys) == 0 {
+		return out
+	}
+	uids := make([]string, len(keys))
+	dirs := make([]int32, len(keys))
+	for i, k := range keys {
+		uids[i] = k.subRouteUID
+		dirs[i] = k.direction
+	}
+	rows, err := db.Query(ctx, `
+		SELECT sub_route_uid, direction, MIN("arrival_time/StartTime") AS dep
+		FROM bus_schedule
+		WHERE type = true AND stopsequence = 0
+		  AND "arrival_time/StartTime" >= $3::time
+		  AND (sub_route_uid, direction) IN (
+		      SELECT unnest($1::text[]), unnest($2::int[])
+		  )
+		GROUP BY sub_route_uid, direction`,
+		uids, dirs, todTime)
+	if err != nil {
+		log.Printf("[MODEL] batchNextDepartures error: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid string
+		var dir int32
+		var dep time.Time
+		if err := rows.Scan(&uid, &dir, &dep); err == nil {
+			out[routeDirKey{subRouteUID: uid, direction: dir}] = dep
+		}
+	}
+	return out
+}
+
+func batchTravelAvg(ctx context.Context, db *pgxpool.Pool, uids []string, hour, dayOfWeek int) map[travelAvgKey]int {
+	out := make(map[travelAvgKey]int)
+	if len(uids) == 0 {
+		return out
+	}
+	rows, err := db.Query(ctx, `
+		SELECT sub_route_uid, direction, stop_uid, avg_seconds
+		FROM bus_travel_avg
+		WHERE hour = $2 AND day_of_week = $3
+		  AND sub_route_uid = ANY($1::text[])`,
+		uids, hour, dayOfWeek)
+	if err != nil {
+		log.Printf("[MODEL] batchTravelAvg error: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid, stop string
+		var dir int32
+		var sec int
+		if err := rows.Scan(&uid, &dir, &stop, &sec); err == nil {
+			out[travelAvgKey{subRouteUID: uid, direction: dir, stopUID: stop, hour: hour, dayOfWeek: dayOfWeek}] = sec
+		}
+	}
+	return out
+}
+
 var etaModel *leaves.Ensemble
 
 var modelEncoders struct {
@@ -41,73 +130,48 @@ func loadModel() {
 	log.Printf("[MODEL] loaded from %s", path)
 }
 
-func fillNextBusTime(
-	ctx context.Context,
-	db *pgxpool.Pool,
-	rc *redis.Client,
-	subRouteUID string,
-	direction int32,
-	stopUID string,
-	city string,
-	stopSequence int,
-	totalStops int,
-	now time.Time,
-) string {
-	if etaModel == nil {
+type busStopCtx struct {
+	subRouteUID  string
+	direction    int32
+	stopUID      string
+	city         string
+	stopSequence int
+	totalStops   int
+}
+
+type predictionInputs struct {
+	now          time.Time
+	nextDep      time.Time
+	travelAvg    int
+	hasTravelAvg bool
+	maxTravelAvg int
+}
+
+func predictNextBusTime(rc *redis.Client, stop busStopCtx, inputs predictionInputs) string {
+	if etaModel == nil || inputs.nextDep.IsZero() {
 		return ""
 	}
-
-	todTime := now.In(taipei).Format("15:04:05")
-	var depTimePG time.Time
-	err := db.QueryRow(ctx, `
-		SELECT "arrival_time/StartTime"
-		FROM bus_schedule
-		WHERE sub_route_uid = $1 AND direction = $2
-		  AND type = true AND stopsequence = 0
-		  AND "arrival_time/StartTime" >= $3::time
-		ORDER BY "arrival_time/StartTime" ASC LIMIT 1`,
-		subRouteUID, direction, todTime).Scan(&depTimePG)
-	if err != nil {
-		return ""
+	t := inputs.now.In(taipei)
+	dep := time.Date(t.Year(), t.Month(), t.Day(),
+		inputs.nextDep.Hour(), inputs.nextDep.Minute(), inputs.nextDep.Second(), 0, taipei)
+	travelSec := inputs.travelAvg
+	ratio := 0.0
+	if stop.totalStops > 0 {
+		ratio = float64(stop.stopSequence) / float64(stop.totalStops)
 	}
-	t := now.In(taipei)
-	nextDep := time.Date(t.Year(), t.Month(), t.Day(),
-		depTimePG.Hour(), depTimePG.Minute(), depTimePG.Second(), 0, taipei)
-
-	var travelSec int
-	err = db.QueryRow(ctx, `
-		SELECT avg_seconds FROM bus_travel_avg
-		WHERE sub_route_uid = $1 AND direction = $2 AND stop_uid = $3
-		  AND hour = $4 AND day_of_week = $5`,
-		subRouteUID, direction, stopUID, t.Hour(), int(t.Weekday())).Scan(&travelSec)
-	if err != nil {
-		var maxSec int
-		err2 := db.QueryRow(ctx, `
-			SELECT COALESCE(MAX(avg_seconds), 0) FROM bus_travel_avg
-			WHERE sub_route_uid = $1 AND direction = $2`,
-			subRouteUID, direction).Scan(&maxSec)
-		if err2 != nil || maxSec == 0 {
-			return nextDep.Format(time.RFC3339)
+	if !inputs.hasTravelAvg {
+		if inputs.maxTravelAvg == 0 {
+			return dep.Format(time.RFC3339)
 		}
-		ratio := 0.0
-		if totalStops > 0 {
-			ratio = float64(stopSequence) / float64(totalStops)
-		}
-		travelSec = int(ratio * float64(maxSec))
+		travelSec = int(ratio * float64(inputs.maxTravelAvg))
 	}
-
 	var wd weatherData
-	if wjson, wErr := rc.Get("weather:" + city).Result(); wErr == nil {
+	if wjson, wErr := rc.Get("weather:" + stop.city).Result(); wErr == nil {
 		json.Unmarshal([]byte(wjson), &wd)
 	}
-
 	cityEnc := -1.0
-	if v, ok := modelEncoders.City[city]; ok {
+	if v, ok := modelEncoders.City[stop.city]; ok {
 		cityEnc = float64(v)
-	}
-	ratio := 0.0
-	if totalStops > 0 {
-		ratio = float64(stopSequence) / float64(totalStops)
 	}
 	features := []float64{
 		float64(t.Hour()),
@@ -117,9 +181,9 @@ func fillNextBusTime(
 		wd.Precipitation,
 		wd.WindSpeed,
 		wd.Humidity,
-		float64(direction),
-		float64(stopSequence),
-		float64(totalStops),
+		float64(stop.direction),
+		float64(stop.stopSequence),
+		float64(stop.totalStops),
 		ratio,
 		cityEnc,
 		-1,
@@ -127,10 +191,7 @@ func fillNextBusTime(
 		-1,
 	}
 	correction := etaModel.PredictSingle(features, 0)
-	eta := nextDep.Add(
-		time.Duration(travelSec)*time.Second +
-			time.Duration(correction)*time.Second,
-	)
+	eta := dep.Add(time.Duration(travelSec)*time.Second + time.Duration(correction)*time.Second)
 	return eta.Format(time.RFC3339)
 }
 

@@ -48,7 +48,7 @@ type thsr_fare struct {
 	} `json:"Fares"`
 }
 
-type TraDelay struct {
+type traDelay struct {
 	TrainNo     string `json:"TrainNo"`
 	StationID   string `json:"StationID"`
 	StationName struct {
@@ -57,7 +57,7 @@ type TraDelay struct {
 	DelayTime     uint16 `json:"DelayTime"`
 	SrcUpdateTime string `json:"SrcUpdateTime"`
 }
-type TraLiveboard struct {
+type traLiveboard struct {
 	StationID   string `json:"StationID"`
 	StationName struct {
 		ZhTw string `json:"Zh_tw"`
@@ -152,9 +152,20 @@ type raw_thsr_timetable struct {
 	} `json:"StopTimes"`
 }
 
-func railMask(wheel, pack, dining, bike, breast, daily, service, suspended uint8) uint16 {
+type railTrainFlags struct {
+	wheel     uint8
+	pack      uint8
+	dining    uint8
+	bike      uint8
+	breast    uint8
+	daily     uint8
+	service   uint8
+	suspended uint8
+}
+
+func railMask(f railTrainFlags) uint16 {
 	var res uint16
-	for i, v := range []uint8{wheel, pack, dining, bike, breast, daily, service, suspended} {
+	for i, v := range []uint8{f.wheel, f.pack, f.dining, f.bike, f.breast, f.daily, f.service, f.suspended} {
 		if v == 1 {
 			res |= 1 << i
 		}
@@ -174,7 +185,7 @@ func fetchTraTimetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 		log.Printf("[RAIL] action=tra_prefetch event=decode_error date=%s error=%v", date, err)
 		return
 	}
-	var row [][]interface{}
+	row := [][]interface{}{}
 	for dec.More() {
 		var temp raw_tra_timetable
 		if err := dec.Decode(&temp); err == nil {
@@ -198,7 +209,16 @@ func fetchTraTimetable(ctx context.Context, db *pgxpool.Pool, client *resty.Clie
 					stop.StationName.ZhTw,
 					at,
 					dt,
-					railMask(temp.DailyTrainInfo.WheelchairFlag, temp.DailyTrainInfo.PackageServiceFlag, temp.DailyTrainInfo.DiningFlag, temp.DailyTrainInfo.BikeFlag, temp.DailyTrainInfo.BreastFeedingFlag, temp.DailyTrainInfo.DailyFlag, temp.DailyTrainInfo.ServiceAddedFlag, stop.SuspendedFlag),
+					railMask(railTrainFlags{
+						wheel:     temp.DailyTrainInfo.WheelchairFlag,
+						pack:      temp.DailyTrainInfo.PackageServiceFlag,
+						dining:    temp.DailyTrainInfo.DiningFlag,
+						bike:      temp.DailyTrainInfo.BikeFlag,
+						breast:    temp.DailyTrainInfo.BreastFeedingFlag,
+						daily:     temp.DailyTrainInfo.DailyFlag,
+						service:   temp.DailyTrainInfo.ServiceAddedFlag,
+						suspended: stop.SuspendedFlag,
+					}),
 					temp.DailyTrainInfo.Note.ZhTw,
 				})
 			}
@@ -288,7 +308,7 @@ func fetchThsrTimetable(ctx context.Context, db *pgxpool.Pool, client *resty.Cli
 		log.Printf("[RAIL] action=thsr_prefetch event=decode_error date=%s error=%v", date, err)
 		return
 	}
-	var row [][]interface{}
+	row := [][]interface{}{}
 	for dec.More() {
 		var temp raw_thsr_timetable
 		if err := dec.Decode(&temp); err == nil {
@@ -422,7 +442,7 @@ func traStation(ctx context.Context, client *resty.Client, rc *redis.Client, db 
 		log.Printf("[RAIL] action=tra_station event=decode_error error=%v", err)
 		return
 	}
-	var row [][]interface{}
+	row := [][]interface{}{}
 	for dec.More() {
 		var temp railStation
 		if err := dec.Decode(&temp); err == nil {
@@ -529,7 +549,7 @@ func traFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		log.Printf("[RAIL] action=tra_fare event=decode_error error=%v", err)
 		return
 	}
-	var row [][]interface{}
+	row := [][]interface{}{}
 	for dec.More() {
 		var temp tra_fare
 		if err := dec.Decode(&temp); err == nil {
@@ -593,7 +613,7 @@ func thsrFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 		log.Printf("[RAIL] action=thsr_fare event=decode_error error=%v", err)
 		return
 	}
-	var row [][]interface{}
+	row := [][]interface{}{}
 	for dec.More() {
 		var temp thsr_fare
 		if err := dec.Decode(&temp); err == nil {
@@ -663,7 +683,7 @@ func traEta(client *resty.Client, rc *redis.Client) {
 				count := 0
 				pipe := rc.Pipeline()
 				for dec.More() {
-					var temp TraDelay
+					var temp traDelay
 					if err := dec.Decode(&temp); err == nil {
 						count++
 						data.Delay[temp.TrainNo] = int32(temp.DelayTime)
@@ -699,7 +719,7 @@ func traEta(client *resty.Client, rc *redis.Client) {
 		delays, _ := rc.HGetAll("tra:delay").Result()
 		res := make(map[string][]*models.Tra_LiveBoard)
 		for dec.More() {
-			var temp TraLiveboard
+			var temp traLiveboard
 			if err := dec.Decode(&temp); err == nil {
 				if delay, ok := delays[temp.TrainNo]; ok {
 					var inter uint16

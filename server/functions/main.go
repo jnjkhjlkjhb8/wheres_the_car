@@ -79,7 +79,7 @@ func main() {
 		}
 		log.Println("[crontab] action=bus&bike event=start")
 		bikeEta(c, rc)
-		BusEta(context.Background(), c, rc, db)
+		busEta(context.Background(), c, rc, db)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
 	_, _ = r.AddFunc("@every 10s", func() {
@@ -224,7 +224,7 @@ func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*
 		}
 	}
 */
-func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]BusStationmap, error) {
+func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]busStationmap, error) {
 	query := `SELECT bssm.station_id, bssm.station_name, bssm.sub_route_uid, bssm.route_name,
 	                 bssm.direction, bssm.stop_uid, bssm.stop_sequence,
 	                 COALESCE(ST_Y(bs.position), 0), COALESCE(ST_X(bs.position), 0)
@@ -236,9 +236,9 @@ func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]BusStati
 		return nil, err
 	}
 	defer rows.Close()
-	var list []BusStationmap
+	var list []busStationmap
 	for rows.Next() {
-		var temp BusStationmap
+		var temp busStationmap
 		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID,
 			&temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence,
 			&temp.Lat, &temp.Lon)
@@ -258,7 +258,8 @@ func makethatsame(city string, subRouteUID string, Direction uint8) (string, uin
 		temp := subRouteUID[len(subRouteUID)-2:]
 		if temp == "01" {
 			return subRouteUID[:len(subRouteUID)-2], 0
-		} else if temp == "02" {
+		}
+		if temp == "02" {
 			return subRouteUID[:len(subRouteUID)-2], 1
 		}
 		return subRouteUID[:len(subRouteUID)-1], Direction
@@ -267,9 +268,12 @@ func makethatsame(city string, subRouteUID string, Direction uint8) (string, uin
 }
 func connectredis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     os.Getenv("REDIS_ADDR"),
-		Password: "",
-		DB:       0,
+		Addr:         os.Getenv("REDIS_ADDR"),
+		Password:     "",
+		DB:           0,
+		PoolSize:     20,
+		MinIdleConns: 3,
+		PoolTimeout:  5 * time.Second,
 	})
 	pong, err := client.Ping().Result()
 	if err != nil {
@@ -280,13 +284,21 @@ func connectredis() *redis.Client {
 	return client
 }
 func connectdb() *pgxpool.Pool {
-	conn, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	config, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Printf("[DB] action=parse_config event=failed error=%v", err)
+		panic(err)
+	}
+	config.MaxConns = 10
+	config.MinConns = 2
+	config.MaxConnLifetime = 30 * time.Minute
+	config.MaxConnIdleTime = 5 * time.Minute
+	conn, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		log.Printf("[DB] action=connect event=failed error=%v", err)
 		panic(err)
 	}
-	err = conn.Ping(context.Background())
-	if err != nil {
+	if err = conn.Ping(context.Background()); err != nil {
 		log.Printf("[DB] action=ping event=failed error=%v", err)
 		panic(err)
 	}

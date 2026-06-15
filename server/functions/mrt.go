@@ -86,7 +86,7 @@ func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, 
 				log.Printf("[MRT] action=getmrt_station system=%s event=decode_error error=%v", system, err)
 				return
 			}
-			var row [][]interface{}
+			row := [][]interface{}{}
 			for dec.More() {
 				var temp mrtStation
 				if err := dec.Decode(&temp); err == nil {
@@ -165,7 +165,7 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 				log.Printf("[MRT] action=getmrt_firstlast system=%s event=decode_error error=%v", system, err)
 				return
 			}
-			var row [][]interface{}
+			row := [][]interface{}{}
 			for dec.More() {
 				var temp mrtFirstlast
 				if err := dec.Decode(&temp); err == nil {
@@ -183,9 +183,7 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 				}
 			}
 			if len(row) > 0 {
-				if _, delErr := db.Exec(ctx, `DELETE FROM mrt_firstlast WHERE system = $1`, system); delErr != nil {
-					log.Printf("[MRT] action=getmrt_firstlast system=%s event=delete_old_error error=%v", system, delErr)
-				}
+				syncStart := time.Now()
 				c1 := `CREATE TEMP TABLE temp_mrt (
                                id text,
                                lid text,
@@ -207,9 +205,16 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 						serviceday,
 						system,
 						created_at,
+						updated_at,
 						trip_head_sign
 					)
-					SELECT id,lid, dsid, dsname, ft, lt,mask,sys,NOW(),sign FROM temp_mrt`
+					SELECT id,lid, dsid, dsname, ft, lt,mask,sys,NOW(),NOW(),sign FROM temp_mrt
+					ON CONFLICT (station_id, lineid, destinationstaionid, serviceday, system)
+					DO UPDATE SET destinationstationname = EXCLUDED.destinationstationname,
+						firsttraintime = EXCLUDED.firsttraintime,
+						lasttraintime = EXCLUDED.lasttraintime,
+						trip_head_sign = EXCLUDED.trip_head_sign,
+						updated_at = NOW()`
 				b, err := db.Begin(ctx)
 				if err != nil {
 					log.Printf("[MRT] action=getmrt_firstlast system=%s event=begin_error error=%v", system, err)
@@ -227,6 +232,9 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 					if commitErr := b.Commit(ctx); commitErr != nil {
 						log.Printf("[MRT] action=getmrt_firstlast system=%s event=commit_error error=%v", system, commitErr)
 					} else {
+						if _, delErr := db.Exec(ctx, `DELETE FROM mrt_schedule WHERE system = $1 AND updated_at < $2`, system, syncStart); delErr != nil {
+							log.Printf("[MRT] action=getmrt_firstlast system=%s event=cleanup_error error=%v", system, delErr)
+						}
 						log.Printf("[MRT] action=getmrt_firstlast system=%s event=success row_count=%d", system, len(row))
 					}
 				} else {

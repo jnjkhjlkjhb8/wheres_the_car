@@ -36,6 +36,7 @@ func computeTravelAvg(ctx context.Context, db *pgxpool.Pool) {
 			       LAG(estimate)    OVER w AS prev_est,
 			       LAG(recorded_at) OVER w AS prev_at
 			FROM bus_eta_history
+			WHERE recorded_at >= NOW() - INTERVAL '7 days'
 			WINDOW w AS (PARTITION BY sub_route_uid, direction, stop_uid ORDER BY recorded_at)
 		)
 		SELECT sub_route_uid, direction, stop_uid, hour, day_of_week,
@@ -63,13 +64,11 @@ func computeTravelAvg(ctx context.Context, db *pgxpool.Pool) {
 	}
 	rows.Close()
 	log.Printf("[TRAVEL_AVG] detected %d arrival events", len(crossings))
-
 	type depKey struct {
 		subRouteUID string
 		direction   int16
 	}
 	depCache := make(map[depKey][]time.Time)
-
 	getDepTimes := func(key depKey) []time.Time {
 		if cached, ok := depCache[key]; ok {
 			return cached
@@ -108,7 +107,7 @@ func computeTravelAvg(ctx context.Context, db *pgxpool.Pool) {
 	samples := make(map[aggKey][]int)
 
 	for _, c := range crossings {
-		dkey := depKey{c.subRouteUID, c.direction}
+		dkey := depKey{subRouteUID: c.subRouteUID, direction: c.direction}
 		depTimes := getDepTimes(dkey)
 		if len(depTimes) == 0 {
 			continue
@@ -132,7 +131,7 @@ func computeTravelAvg(ctx context.Context, db *pgxpool.Pool) {
 		if travelSec < 0 || travelSec > 7200 {
 			continue
 		}
-		key := aggKey{c.subRouteUID, c.direction, c.stopUID, c.hour, c.dayOfWeek}
+		key := aggKey{subRouteUID: c.subRouteUID, direction: c.direction, stopUID: c.stopUID, hour: c.hour, dayOfWeek: c.dayOfWeek}
 		samples[key] = append(samples[key], travelSec)
 	}
 
