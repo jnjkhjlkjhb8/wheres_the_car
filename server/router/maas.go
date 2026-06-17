@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis"
@@ -126,6 +127,22 @@ func (s *MaasServer) plan(ctx context.Context, req *pb.MaasPlanRequest) (*pb.Maa
 }
 func (s *MaasServer) get(ctx context.Context, req *pb.MaasPlanRequest) (*pb.MaasPlanResponse, error) {
 	paramTime := fmt.Sprintf("%sT%s", req.Date, req.Time)
+
+	gc := req.Gc
+	if gc < 0 || gc > 1 {
+		gc = 0.0
+	}
+
+	transitModes := req.TransitModes
+	if len(transitModes) == 0 {
+		transitModes = []int32{3, 4, 5, 6, 7, 8, 9}
+	}
+	parts := make([]string, len(transitModes))
+	for i, m := range transitModes {
+		parts[i] = fmt.Sprintf("%d", m)
+	}
+	transitStr := strings.Join(parts, ",")
+
 	var apiResp tdxAPIResponse
 	resp, err := s.maasClient.R().
 		SetContext(ctx).
@@ -133,9 +150,9 @@ func (s *MaasServer) get(ctx context.Context, req *pb.MaasPlanRequest) (*pb.Maas
 		SetQueryParam("destination", fmt.Sprintf("%.6f,%.6f", req.ToLat, req.ToLon)).
 		SetQueryParam("depart", paramTime).
 		SetQueryParam("arrival", paramTime).
-		SetQueryParam("gc", "0.0").
+		SetQueryParam("gc", fmt.Sprintf("%.2f", gc)).
 		SetQueryParam("top", "5").
-		SetQueryParam("transit", "3,4,5,6,7,8,9").
+		SetQueryParam("transit", transitStr).
 		SetQueryParam("transfer_time", "15,60").
 		SetQueryParam("first_mile_mode", "0").
 		SetQueryParam("first_mile_time", "10").
@@ -222,8 +239,9 @@ func convert(api *tdxAPIResponse) *pb.MaasPlanResponse {
 	return out
 }
 func maasKey(req *pb.MaasPlanRequest) string {
-	key := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f,%s,%s,%v",
-		req.FromLat, req.FromLon, req.ToLat, req.ToLon, req.Date, req.Time, req.ArriveBy)
+	key := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f,%s,%s,%v,%.2f,%v",
+		req.FromLat, req.FromLon, req.ToLat, req.ToLon,
+		req.Date, req.Time, req.ArriveBy, req.Gc, req.TransitModes)
 	sum := sha256.Sum256([]byte(key))
 	return fmt.Sprintf("maas:plan:%x", sum[:8])
 }

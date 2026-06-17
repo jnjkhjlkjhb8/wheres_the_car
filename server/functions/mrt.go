@@ -294,3 +294,51 @@ func mrtEta(client *resty.Client, rc *redis.Client) {
 	}
 	log.Printf("[MRT_ETA] action=mrt_eta event=complete")
 }
+
+type mrtODFare struct {
+	FromStationID string `json:"FromStationID"`
+	ToStationID   string `json:"ToStationID"`
+	Fares         []struct {
+		TicketType int `json:"TicketType"`
+		Price      int `json:"Price"`
+	} `json:"Fares"`
+}
+
+func mrtJourneyMatrix(ctx context.Context, pool *pgxpool.Pool, client *resty.Client) error {
+	systems := []string{"TRTC", "KRTC", "KLRT"}
+	for _, system := range systems {
+		var fares []mrtODFare
+		_, err := client.R().
+			SetContext(ctx).
+			SetResult(&fares).
+			Get("/Rail/Metro/ODFare/" + system)
+		if err != nil {
+			return fmt.Errorf("mrt ODFare %s: %w", system, err)
+		}
+
+		batch := &pgx.Batch{}
+		for _, f := range fares {
+			adultPrice := 0
+			for _, t := range f.Fares {
+				if t.TicketType == 1 {
+					adultPrice = t.Price
+				}
+			}
+			id := fmt.Sprintf("%s-%s-%s", system, f.FromStationID, f.ToStationID)
+			batch.Queue(`
+				INSERT INTO mrt_journey_matrix
+					(id, from_station_id, to_station_id, system, travel_time_min, fare_nt, updated_at)
+				VALUES ($1,$2,$3,$4,0,$5,NOW())
+				ON CONFLICT (from_station_id, to_station_id, system)
+				DO UPDATE SET fare_nt=EXCLUDED.fare_nt, updated_at=NOW()`,
+				id, f.FromStationID, f.ToStationID, system, adultPrice,
+			)
+		}
+		br := pool.SendBatch(ctx, batch)
+		if err := br.Close(); err != nil {
+			return fmt.Errorf("mrt journey matrix batch %s: %w", system, err)
+		}
+		log.Printf("[MRT] journey matrix upserted %d rows for %s", len(fares), system)
+	}
+	return nil
+}
