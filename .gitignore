@@ -55,6 +55,7 @@ docs/requirements.md
 
 # Docker secrets and large data files
 docker.env
+secrets/
 osrm-data/
 model/
 
