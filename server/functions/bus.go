@@ -668,7 +668,7 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
 	}
 }
 
-func busEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
+func busEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, dispatcher *notificationDispatcher) {
 	log.Printf("[BUS_ETA] action=Bus_eta event=start")
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
@@ -681,14 +681,14 @@ func busEta(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgx
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			processBusEtaCity(ctx, client, rc, db, city)
+			processBusEtaCity(ctx, client, rc, db, city, dispatcher)
 		}(city)
 	}
 	wg.Wait()
 	log.Printf("[BUS_ETA] action=Bus_eta event=complete")
 }
 
-func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string) {
+func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, dispatcher *notificationDispatcher) {
 	log.Printf("[BUS_ETA] action=Bus_eta city=%s event=city_start", city)
 	prefix := citymap[city]
 	mp, cached := cachedBusStaticMap(prefix)
@@ -920,6 +920,7 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 			SrcUpdateTime: stime,
 			Buses:         busmap[uid],
 		})
+		dispatcher.arrival(ctx, "bus", b.SubRouteUID, b.StopUID, strconv.Itoa(int(b.Direction)), est)
 		if _, ok = routes[b.SubRouteUID]; !ok {
 			routes[b.SubRouteUID] = &models.Bus_RouteArrival{
 				SubRouteUid: b.SubRouteUID,

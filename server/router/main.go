@@ -236,10 +236,28 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 	rl := newRateLimiter()
-	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(rateLimitInterceptor(rl, 30, time.Second)),
-		grpc.StreamInterceptor(rateLimitStreamInterceptor(rl, 30, time.Second)),
-	)
+	tlsCredentials, err := firebaseTLSCredentialsFromEnv()
+	if err != nil {
+		log.Fatalf("gRPC TLS initialization failed: %v", err)
+	}
+	appCheckVerifier, enforceAppCheck, err := firebaseAppCheckFromEnv(context.Background())
+	if err != nil {
+		log.Fatalf("Firebase Admin initialization failed: %v", err)
+	}
+	serverOptions := []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(
+			rateLimitInterceptor(rl, 30, time.Second),
+			appCheckUnaryInterceptor(appCheckVerifier, enforceAppCheck),
+		),
+		grpc.ChainStreamInterceptor(
+			rateLimitStreamInterceptor(rl, 30, time.Second),
+			appCheckStreamInterceptor(appCheckVerifier, enforceAppCheck),
+		),
+	}
+	if tlsCredentials != nil {
+		serverOptions = append(serverOptions, grpc.Creds(tlsCredentials))
+	}
+	grpcServer := grpc.NewServer(serverOptions...)
 	pb.RegisterBus_Route_ServiceServer(grpcServer, &BusRouteserver{db: db, rc: rc, cache: newTTLCache()})
 	pb.RegisterBus_Station_ServiceServer(grpcServer, &BusStationserver{rc: rc})
 	pb.RegisterBike_ServiceServer(grpcServer, &BikeServer{db: db, rc: rc, cache: newTTLCache()})
@@ -252,6 +270,7 @@ func main() {
 	pb.RegisterNear_Station_ServiceServer(grpcServer, &Near_Server{db: db, osrmClient: resty.New().SetTimeout(5 * time.Second)})
 	pb.RegisterAlert_ServiceServer(grpcServer, &AlertServer{rc: rc})
 	pb.RegisterMaasServiceServer(grpcServer, newMaasServer(rc, func() string { return getToken(rc) }))
+	pb.RegisterFirebase_ServiceServer(grpcServer, &FirebaseServer{store: newFirebaseStore(db), now: time.Now})
 	go startHTTPServer(db)
 	log.Printf("gRPC server is running on port %d", 50051)
 	if err := grpcServer.Serve(lis); err != nil {

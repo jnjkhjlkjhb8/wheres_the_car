@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -25,7 +29,7 @@ var mqttTopics = []mqttTopicCfg{
 	{"v2/Rail/THSR/AlertInfo", 5 * time.Minute},
 }
 
-func startMQTT(rc *redis.Client) mqtt.Client {
+func startMQTT(rc *redis.Client, dispatcher *notificationDispatcher) mqtt.Client {
 	clientID := os.Getenv("MQTT_CLIENT_ID")
 	username := os.Getenv("MQTT_USERNAME")
 	password := os.Getenv("MQTT_PASSWORD")
@@ -45,7 +49,7 @@ func startMQTT(rc *redis.Client) mqtt.Client {
 		SetTLSConfig(&tls.Config{}).
 		SetOnConnectHandler(func(c mqtt.Client) {
 			log.Println("[MQTT] connected")
-			mqttsubscribeall(c, rc)
+			mqttsubscribeall(c, rc, dispatcher)
 		}).
 		SetConnectionLostHandler(func(_ mqtt.Client, err error) {
 			log.Printf("[MQTT] connection lost: %v", err)
@@ -58,11 +62,11 @@ func startMQTT(rc *redis.Client) mqtt.Client {
 	}
 	return c
 }
-func mqttsubscribeall(c mqtt.Client, rc *redis.Client) {
+func mqttsubscribeall(c mqtt.Client, rc *redis.Client, dispatcher *notificationDispatcher) {
 	for _, t := range mqttTopics {
 		pattern, ttl := t.pattern, t.ttl
 		tok := c.Subscribe(pattern, 1, func(_ mqtt.Client, msg mqtt.Message) {
-			mqtthandle(rc, msg, ttl)
+			mqtthandle(rc, msg, ttl, dispatcher)
 		})
 		tok.Wait()
 		if err := tok.Error(); err != nil {
@@ -72,7 +76,7 @@ func mqttsubscribeall(c mqtt.Client, rc *redis.Client) {
 		}
 	}
 }
-func mqtthandle(rc *redis.Client, msg mqtt.Message, ttl time.Duration) {
+func mqtthandle(rc *redis.Client, msg mqtt.Message, ttl time.Duration, dispatcher *notificationDispatcher) {
 	key := "mqtt:" + strings.ReplaceAll(msg.Topic(), "/", ":")
 	if err := rc.Set(key, msg.Payload(), ttl).Err(); err != nil {
 		log.Printf("[MQTT] redis set failed key=%s err=%v", key, err)
@@ -81,4 +85,94 @@ func mqtthandle(rc *redis.Client, msg mqtt.Message, ttl time.Duration) {
 	if err := rc.Publish(key, msg.Payload()).Err(); err != nil {
 		log.Printf("[MQTT] redis publish failed key=%s err=%v", key, err)
 	}
+	dispatchRouteAlerts(context.Background(), routeAlerts(msg.Topic(), msg.Payload()), func(key string, ttl time.Duration) bool {
+		ok, err := rc.SetNX("fcm:alert:"+key, "1", ttl).Result()
+		return err == nil && ok
+	}, dispatcher)
+}
+
+type normalizedRouteAlert struct{ routeType, routeKey, body, id string }
+
+func dispatchRouteAlerts(ctx context.Context, alerts []normalizedRouteAlert, claim func(string, time.Duration) bool, dispatcher *notificationDispatcher) {
+	for _, alert := range alerts {
+		key := alert.id
+		if key == "" {
+			key = fmt.Sprintf("%x", sha256.Sum256([]byte(alert.routeType+"\x00"+alert.routeKey+"\x00"+alert.body)))
+		}
+		if claim(key, 5*time.Minute) {
+			dispatcher.routeAlert(ctx, alert.routeType, alert.routeKey, alert.body)
+		}
+	}
+}
+
+func routeAlerts(topic string, payload []byte) []normalizedRouteAlert {
+	routeType := ""
+	switch {
+	case strings.Contains(topic, "/Bus/"):
+		routeType = "bus"
+	case strings.Contains(topic, "/Metro/"):
+		routeType = "mrt"
+	case strings.Contains(topic, "/TRA/"):
+		routeType = "tra"
+	case strings.Contains(topic, "/THSR/"):
+		routeType = "thsr"
+	}
+	if routeType == "" {
+		return nil
+	}
+	var raw any
+	if json.Unmarshal(payload, &raw) != nil {
+		return nil
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		items = []any{raw}
+	}
+	seen := map[string]struct{}{}
+	out := make([]normalizedRouteAlert, 0, len(items))
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		key := firstString(m, routeKeyFields(routeType)...)
+		if key == "" {
+			continue
+		}
+		body := firstString(m, "Description", "NewsContent", "AlertDescription", "Message")
+		if body == "" {
+			body = firstString(m, "NewsTitle", "Title")
+		}
+		if body == "" {
+			continue
+		}
+		dedupe := key + "\x00" + body
+		if _, ok := seen[dedupe]; ok {
+			continue
+		}
+		seen[dedupe] = struct{}{}
+		out = append(out, normalizedRouteAlert{routeType: routeType, routeKey: key, body: body, id: firstString(m, "NewsID", "AlertID", "UpdateTime")})
+	}
+	return out
+}
+
+func routeKeyFields(routeType string) []string {
+	switch routeType {
+	case "bus":
+		return []string{"SubRouteUID"}
+	case "mrt":
+		return []string{"LineID"}
+	case "tra", "thsr":
+		return []string{"LineID"}
+	default:
+		return nil
+	}
+}
+func firstString(m map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := m[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }

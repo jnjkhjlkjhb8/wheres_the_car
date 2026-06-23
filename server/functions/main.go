@@ -22,6 +22,11 @@ func main() {
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
+	sender, err := newFirebaseSender(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	dispatcher := newNotificationDispatcher(notificationStore{db: db}, sender)
 	defer func(rc *redis.Client) {
 		err := rc.Close()
 		if err != nil {
@@ -70,7 +75,7 @@ func main() {
 			return
 		}
 		log.Println("[crontab] action=tra event=start")
-		traEta(c, rc)
+		traEta(c, rc, dispatcher)
 		log.Println("[crontab] action=tra event=end")
 	})
 	_, _ = r.AddFunc("@every 30s", func() {
@@ -79,7 +84,7 @@ func main() {
 		}
 		log.Println("[crontab] action=bus&bike event=start")
 		bikeEta(c, rc)
-		busEta(context.Background(), c, rc, db)
+		busEta(context.Background(), c, rc, db, dispatcher)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
 	_, _ = r.AddFunc("@every 10s", func() {
@@ -87,7 +92,7 @@ func main() {
 			return
 		}
 		log.Println("[crontab] action=mrt event=start")
-		mrtEta(c, rc)
+		mrtEta(c, rc, dispatcher)
 		log.Println("[crontab] action=mrt event=end")
 	})
 	_, _ = r.AddFunc("@every 10m", func() {
@@ -103,7 +108,7 @@ func main() {
 	})
 	r.Start()
 	defer r.Stop()
-	mqttClient := startMQTT(rc)
+	mqttClient := startMQTT(rc, dispatcher)
 	if mqttClient != nil {
 		defer mqttClient.Disconnect(500)
 	}
