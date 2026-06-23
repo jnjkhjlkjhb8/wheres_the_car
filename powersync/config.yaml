@@ -1,14 +1,16 @@
-source:
-  type: postgresql
-  uri: !env PS_DATABASE_URL
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_SOURCE_DATABASE_URL
 
 storage:
   type: postgresql
   uri: !env PS_DATABASE_URL
 
 client_auth:
-  jwks_uris:
-    - http://router:8080/api/.well-known/jwks.json
+  jwks_uri: http://router:8080/api/.well-known/jwks.json
+  audience:
+    - powersync
 
-sync_rules:
+sync_config:
   path: /config/sync-rules.yaml
