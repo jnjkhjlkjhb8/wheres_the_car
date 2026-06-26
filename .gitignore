@@ -52,18 +52,19 @@ android/app/build.gradle.kts
 android/app/src/main/AndroidManifest.xml
 server/router/server.go
 docs/requirements.md
-
-# Docker secrets and large data files
-docker.env
+.env
 secrets/
 osrm-data/
 model/
-
-# Generated Dart gRPC stubs (regenerate via protoc)
 frontend/lib/generated/
 frontend/lib/data/generated/
-
-# Generated Go protobuf stubs (generated in Docker build)
 models/*.pb.go
 models/*_grpc.pb.go
 /docs/README.md
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+ds/dist/
+ds/node_modules/
