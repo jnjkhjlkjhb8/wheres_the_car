@@ -68,3 +68,4 @@ ds-bundle/
 .design-sync/node_modules
 ds/dist/
 ds/node_modules/
+node_modules
