@@ -4,7 +4,10 @@ services:
       context: ./embed
     environment:
       OLLAMA_HOST: 0.0.0.0
-    mem_limit: 800m
+      OLLAMA_KEEP_ALIVE: 30m
+      OLLAMA_NUM_PARALLEL: 2
+      OLLAMA_MAX_LOADED_MODELS: 1
+    mem_limit: 2g
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
@@ -88,7 +91,6 @@ services:
       TZ: Asia/Taipei
       POWERSYNC_CONFIG_PATH: /config/config.yaml
       POWERSYNC_SYNC_RULES_PATH: /config/sync-rules.yaml
-
     mem_limit: 512m
     depends_on:
       router:
