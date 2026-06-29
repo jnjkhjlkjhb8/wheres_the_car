@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+option go_package = "github.com/jnjkhjlkjhb8/wheres_the_car/models";
+
+service Firebase_Service {
+  rpc upsertDevice(UpsertDeviceRequest) returns (DeviceState) {}
+  rpc setRouteSubscription(RouteSubscriptionRequest) returns (Ack) {}
+  rpc createArrivalReminder(CreateArrivalReminderRequest) returns (ArrivalReminder) {}
+  rpc cancelArrivalReminder(CancelArrivalReminderRequest) returns (Ack) {}
+  rpc listDeviceState(DeviceRequest) returns (DeviceState) {}
+}
+
+message Ack {
+  bool ok = 1;
+  string message = 2;
+}
+
+message DeviceIdentity {
+  string install_id = 1;
+  string fcm_token = 2;
+  string platform = 3;
+  string app_version = 4;
+}
+
+message DevicePrefs {
+  bool push_enabled = 1;
+  bool analytics_enabled = 2;
+  bool crashlytics_enabled = 3;
+  bool performance_enabled = 4;
+}
+
+message UpsertDeviceRequest {
+  DeviceIdentity identity = 1;
+  DevicePrefs prefs = 2;
+}
+
+message DeviceRequest {
+  string install_id = 1;
+}
+
+message DeviceState {
+  DeviceIdentity identity = 1;
+  DevicePrefs prefs = 2;
+}
+
+message RouteSubscriptionRequest {
+  string install_id = 1;
+  string route_type = 2;
+  string route_key = 3;
+  bool enabled = 4;
+}
+
+message CreateArrivalReminderRequest {
+  string install_id = 1;
+  string route_type = 2;
+  string route_key = 3;
+  string stop_key = 4;
+  string direction = 5;
+  int32 lead_minutes = 6;
+  int64 expires_at_unix = 7;
+}
+
+message ArrivalReminder {
+  string reminder_id = 1;
+  string install_id = 2;
+  string route_type = 3;
+  string route_key = 4;
+  string stop_key = 5;
+  string direction = 6;
+  int32 lead_minutes = 7;
+  int64 expires_at_unix = 8;
+}
+
+message CancelArrivalReminderRequest {
+  string reminder_id = 1;
+  string install_id = 2;
+}
