@@ -670,7 +670,7 @@ func thsrFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 	}
 }
 
-func traEta(client *resty.Client, rc *redis.Client, dispatcher *notificationDispatcher) {
+func traEta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[TRA_ETA] action=tra_eta event=start")
 	dec, comp, err, flipopen := callApi(client, rc, "/v2/Rail/TRA/LiveTrainDelay", "tra_delay")
 	if err == nil && comp {
@@ -741,18 +741,6 @@ func traEta(client *resty.Client, rc *redis.Client, dispatcher *notificationDisp
 					TripLine:               int32(temp.TripLine),
 				}
 				res[temp.StationID] = append(res[temp.StationID], pb)
-				if scheduled, parseErr := time.ParseInLocation("15:04", temp.ScheduledArrivalTime, taipei); parseErr == nil {
-					now := time.Now().In(taipei)
-					scheduled = time.Date(now.Year(), now.Month(), now.Day(), scheduled.Hour(), scheduled.Minute(), 0, 0, taipei).Add(time.Duration(temp.DelayTime) * time.Minute)
-					if scheduled.Before(now.Add(-6 * time.Hour)) {
-						scheduled = scheduled.Add(24 * time.Hour)
-					}
-					direction := "0"
-					if temp.Direction {
-						direction = "1"
-					}
-					dispatcher.arrival(context.Background(), "tra", temp.TrainNo, temp.StationID, direction, int32(scheduled.Sub(now).Seconds()))
-				}
 			}
 		}
 		pipe := rc.Pipeline()

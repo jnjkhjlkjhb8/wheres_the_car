@@ -920,7 +920,9 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 			SrcUpdateTime: stime,
 			Buses:         busmap[uid],
 		})
-		dispatcher.arrival(ctx, "bus", b.SubRouteUID, b.StopUID, strconv.Itoa(int(b.Direction)), est)
+		if shouldDispatchBusArrival(ok, status, est) {
+			dispatcher.arrival(ctx, "bus", b.SubRouteUID, b.StopUID, strconv.Itoa(int(b.Direction)), est)
+		}
 		if _, ok = routes[b.SubRouteUID]; !ok {
 			routes[b.SubRouteUID] = &models.Bus_RouteArrival{
 				SubRouteUid: b.SubRouteUID,
@@ -955,6 +957,10 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 	}
 	//savebushistory(ctx, db, eat, posit)
 	saveBusEtaHistory(ctx, db, historyRows)
+}
+
+func shouldDispatchBusArrival(found bool, status uint8, etaSeconds int32) bool {
+	return found && status == 0 && etaSeconds > 0
 }
 func busDailyroute(client *resty.Client, rc *redis.Client) {
 	log.Printf("[bus] action=bus_dailyroute event=start")

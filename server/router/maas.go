@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-redis/redis"
 	"github.com/go-resty/resty/v2"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,11 +22,16 @@ import (
 type MaasServer struct {
 	pb.UnimplementedMaasServiceServer
 	rc         *redis.Client
+	db         maasDB
 	maasClient *resty.Client
 	sfGroup    singleflight.Group
 }
 
-func newMaasServer(rc *redis.Client, tdxAuthToken func() string) *MaasServer {
+type maasDB interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func newMaasServer(rc *redis.Client, db maasDB, tdxAuthToken func() string) *MaasServer {
 	c := resty.New().
 		SetBaseURL("https://tdx.transportdata.tw/api/maas").
 		SetHeader("Content-Type", "application/json").
@@ -41,7 +47,7 @@ func newMaasServer(rc *redis.Client, tdxAuthToken func() string) *MaasServer {
 			req.SetAuthToken(tdxAuthToken())
 			return nil
 		})
-	return &MaasServer{rc: rc, maasClient: c}
+	return &MaasServer{rc: rc, db: db, maasClient: c}
 }
 
 type tdxRoute struct {
@@ -81,6 +87,7 @@ type tdxTransport struct {
 	Mode       string `json:"mode"`
 	Name       string `json:"name"`
 	ShortName  string `json:"shortName"`
+	Number     string `json:"number"`
 	LongName   string `json:"longName"`
 	Headsign   string `json:"headsign"`
 	Category   string `json:"category"`
@@ -166,9 +173,9 @@ func (s *MaasServer) get(ctx context.Context, req *pb.MaasPlanRequest) (*pb.Maas
 	if !resp.IsSuccess() {
 		return nil, fmt.Errorf("TDX MaaS HTTP %d", resp.StatusCode())
 	}
-	return convert(&apiResp), nil
+	return convert(ctx, s.db, &apiResp), nil
 }
-func convert(api *tdxAPIResponse) *pb.MaasPlanResponse {
+func convert(ctx context.Context, db maasDB, api *tdxAPIResponse) *pb.MaasPlanResponse {
 	out := &pb.MaasPlanResponse{}
 	for _, route := range api.Data.Routes {
 		pbRoute := &pb.Route{
@@ -202,6 +209,7 @@ func convert(api *tdxAPIResponse) *pb.MaasPlanResponse {
 						Lng: sec.Arrival.Place.Location.Lng,
 					},
 				},
+				NotificationIdentity: &pb.NotificationIdentity{},
 			}
 			if sec.Transport.Mode != "" {
 				pbSec.Transport = &pb.Transport{
@@ -232,16 +240,69 @@ func convert(api *tdxAPIResponse) *pb.MaasPlanResponse {
 					Phone:    sec.Agency.Phone,
 				}
 			}
+			pbSec.NotificationIdentity = resolveBusNotificationIdentity(ctx, db, sec)
 			pbRoute.Sections = append(pbRoute.Sections, pbSec)
 		}
 		out.Routes = append(out.Routes, pbRoute)
 	}
 	return out
 }
+
+func resolveBusNotificationIdentity(ctx context.Context, db maasDB, sec tdxSection) *pb.NotificationIdentity {
+	identity := &pb.NotificationIdentity{}
+	if db == nil || !isBusMode(sec.Transport.Mode) {
+		return identity
+	}
+	rows, err := db.Query(ctx, `
+		SELECT b.sub_route_uid, b.direction, departure.stop_uid, arrival.stop_uid
+		FROM bus_subroutes b
+		JOIN bus_station_stop_map departure
+		  ON departure.sub_route_uid=b.sub_route_uid AND departure.direction=b.direction
+		JOIN bus_station_stop_map arrival
+		  ON arrival.sub_route_uid=b.sub_route_uid AND arrival.direction=b.direction
+		WHERE departure.station_name=$1
+		  AND arrival.station_name=$2
+		  AND arrival.stop_sequence>departure.stop_sequence
+		  AND (
+		    ($3<>'' AND (b.route_name=$3 OR b.sub_route_name=$3))
+		    OR ($4<>'' AND (b.route_name=$4 OR b.sub_route_name=$4))
+		    OR ($5<>'' AND (b.route_name=$5 OR b.sub_route_name=$5))
+		  )
+		LIMIT 2`,
+		sec.Departure.Place.Name,
+		sec.Arrival.Place.Name,
+		sec.Transport.Name,
+		sec.Transport.ShortName,
+		sec.Transport.Number,
+	)
+	if err != nil {
+		return identity
+	}
+	defer rows.Close()
+	var matches []*pb.NotificationIdentity
+	for rows.Next() {
+		match := &pb.NotificationIdentity{RouteType: "bus", Supported: true}
+		var direction int32
+		if rows.Scan(&match.RouteKey, &direction, &match.DepartureStopKey, &match.ArrivalStopKey) != nil {
+			return identity
+		}
+		match.Direction = fmt.Sprint(direction)
+		matches = append(matches, match)
+	}
+	if rows.Err() != nil || len(matches) != 1 {
+		return identity
+	}
+	return matches[0]
+}
+
+func isBusMode(mode string) bool {
+	return strings.EqualFold(mode, "bus") || strings.EqualFold(mode, "HighwayBus")
+}
+
 func maasKey(req *pb.MaasPlanRequest) string {
 	key := fmt.Sprintf("%.6f,%.6f,%.6f,%.6f,%s,%s,%v,%.2f,%v",
 		req.FromLat, req.FromLon, req.ToLat, req.ToLon,
 		req.Date, req.Time, req.ArriveBy, req.Gc, req.TransitModes)
 	sum := sha256.Sum256([]byte(key))
-	return fmt.Sprintf("maas:plan:%x", sum[:8])
+	return fmt.Sprintf("maas:plan:v2:%x", sum[:8])
 }

@@ -75,7 +75,7 @@ func main() {
 			return
 		}
 		log.Println("[crontab] action=tra event=start")
-		traEta(c, rc, dispatcher)
+		traEta(c, rc)
 		log.Println("[crontab] action=tra event=end")
 	})
 	_, _ = r.AddFunc("@every 30s", func() {
@@ -92,7 +92,7 @@ func main() {
 			return
 		}
 		log.Println("[crontab] action=mrt event=start")
-		mrtEta(c, rc, dispatcher)
+		mrtEta(c, rc)
 		log.Println("[crontab] action=mrt event=end")
 	})
 	_, _ = r.AddFunc("@every 10m", func() {

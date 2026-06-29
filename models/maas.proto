@@ -37,6 +37,16 @@ message Section {
   Transport transport = 5;
   repeated IntermediateStop intermediateStops = 6;
   Agency agency = 7;
+  NotificationIdentity notification_identity = 8;
+}
+
+message NotificationIdentity {
+  string route_type = 1;
+  string route_key = 2;
+  string direction = 3;
+  string departure_stop_key = 4;
+  string arrival_stop_key = 5;
+  bool supported = 6;
 }
 
 message Summary {

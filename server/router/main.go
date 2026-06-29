@@ -269,7 +269,7 @@ func main() {
 	pb.RegisterThsr_DetainServiceServer(grpcServer, &Thsr_DetainServer{db: db, client: c, rc: rc})
 	pb.RegisterNear_Station_ServiceServer(grpcServer, &Near_Server{db: db, osrmClient: resty.New().SetTimeout(5 * time.Second)})
 	pb.RegisterAlert_ServiceServer(grpcServer, &AlertServer{rc: rc})
-	pb.RegisterMaasServiceServer(grpcServer, newMaasServer(rc, func() string { return getToken(rc) }))
+	pb.RegisterMaasServiceServer(grpcServer, newMaasServer(rc, db, func() string { return getToken(rc) }))
 	pb.RegisterFirebase_ServiceServer(grpcServer, &FirebaseServer{store: newFirebaseStore(db), now: time.Now})
 	go startHTTPServer(db)
 	log.Printf("gRPC server is running on port %d", 50051)

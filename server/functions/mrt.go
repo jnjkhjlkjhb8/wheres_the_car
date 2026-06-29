@@ -246,7 +246,7 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 	}
 	log.Printf("[MRT] action=getmrt_firstlast event=complete")
 }
-func mrtEta(client *resty.Client, rc *redis.Client, dispatcher *notificationDispatcher) {
+func mrtEta(client *resty.Client, rc *redis.Client) {
 	log.Printf("[MRT_ETA] action=mrt_eta event=start")
 	var systems = []string{"TRTC", "KRTC", "KLRT", "TYMC"}
 	for _, system := range systems {

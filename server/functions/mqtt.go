@@ -95,10 +95,11 @@ type normalizedRouteAlert struct{ routeType, routeKey, body, id string }
 
 func dispatchRouteAlerts(ctx context.Context, alerts []normalizedRouteAlert, claim func(string, time.Duration) bool, dispatcher *notificationDispatcher) {
 	for _, alert := range alerts {
-		key := alert.id
-		if key == "" {
-			key = fmt.Sprintf("%x", sha256.Sum256([]byte(alert.routeType+"\x00"+alert.routeKey+"\x00"+alert.body)))
+		id := alert.id
+		if id == "" {
+			id = fmt.Sprintf("%x", sha256.Sum256([]byte(alert.body)))
 		}
+		key := alert.routeType + "\x00" + alert.routeKey + "\x00" + id
 		if claim(key, 5*time.Minute) {
 			dispatcher.routeAlert(ctx, alert.routeType, alert.routeKey, alert.body)
 		}
@@ -117,7 +118,7 @@ func routeAlerts(topic string, payload []byte) []normalizedRouteAlert {
 	case strings.Contains(topic, "/THSR/"):
 		routeType = "thsr"
 	}
-	if routeType == "" {
+	if routeType != "bus" {
 		return nil
 	}
 	var raw any
@@ -157,16 +158,10 @@ func routeAlerts(topic string, payload []byte) []normalizedRouteAlert {
 }
 
 func routeKeyFields(routeType string) []string {
-	switch routeType {
-	case "bus":
+	if routeType == "bus" {
 		return []string{"SubRouteUID"}
-	case "mrt":
-		return []string{"LineID"}
-	case "tra", "thsr":
-		return []string{"LineID"}
-	default:
-		return nil
 	}
+	return nil
 }
 func firstString(m map[string]any, keys ...string) string {
 	for _, key := range keys {
