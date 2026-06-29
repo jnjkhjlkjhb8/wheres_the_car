@@ -195,7 +195,7 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
        						   mask int2,
        						   sys text
 					) ON COMMIT DROP;`
-				c2 := `INSERT INTO mrt_firstlast (
+				c2 := `INSERT INTO mrt_schedule (
 						station_id,
 						lineid,
 						destinationstaionid,
