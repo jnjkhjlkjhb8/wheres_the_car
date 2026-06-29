@@ -5,7 +5,7 @@ services:
     environment:
       OLLAMA_HOST: 0.0.0.0
       OLLAMA_KEEP_ALIVE: 30m
-      OLLAMA_NUM_PARALLEL: 2
+      OLLAMA_NUM_PARALLEL: 4
       OLLAMA_MAX_LOADED_MODELS: 1
     mem_limit: 2g
     volumes:

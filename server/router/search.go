@@ -15,12 +15,14 @@ import (
 )
 
 type searchResult struct {
-	Type   string `json:"type"`
-	UID    string `json:"uid"`
-	Name   string `json:"name"`
-	City   string `json:"city"`
-	Depart string `json:"depart"`
-	Destin string `json:"destin"`
+	Type   string   `json:"type"`
+	UID    string   `json:"uid"`
+	Name   string   `json:"name"`
+	City   string   `json:"city"`
+	Depart string   `json:"depart"`
+	Destin string   `json:"destin"`
+	Lat    *float64 `json:"lat"`
+	Lon    *float64 `json:"lon"`
 }
 
 func toVecLiteral(v []float32) string {
@@ -61,7 +63,8 @@ func vectorSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 		return textFallback(ctx, q, limit, db)
 	}
 	rows, err := db.Query(ctx, `
-		SELECT type, uid, name, city, depart, destin
+		SELECT type, uid, name, city, depart, destin,
+		       ST_Y(geom), ST_X(geom)
 		FROM search_vector
 		ORDER BY embedding <=> $1::vector
 		LIMIT $2`,
@@ -74,7 +77,7 @@ func vectorSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 	var results []searchResult
 	for rows.Next() {
 		var r searchResult
-		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin); err == nil {
+		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin, &r.Lat, &r.Lon); err == nil {
 			results = append(results, r)
 		}
 	}
@@ -83,7 +86,8 @@ func vectorSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 
 func textFallback(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([]searchResult, error) {
 	rows, err := db.Query(ctx, `
-		SELECT type, uid, name, city, depart, destin
+		SELECT type, uid, name, city, depart, destin,
+		       ST_Y(geom), ST_X(geom)
 		FROM search_vector
 		WHERE name % $1
 		   OR name  ILIKE '%' || $1 || '%'
@@ -100,7 +104,7 @@ func textFallback(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 	var results []searchResult
 	for rows.Next() {
 		var r searchResult
-		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin); err == nil {
+		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin, &r.Lat, &r.Lon); err == nil {
 			results = append(results, r)
 		}
 	}
@@ -120,7 +124,8 @@ func expandStationRoutes(ctx context.Context, primary []searchResult, db *pgxpoo
 		return primary
 	}
 	rows, err := db.Query(ctx, `
-		SELECT sv.type, sv.uid, sv.name, sv.city, sv.depart, sv.destin
+		SELECT sv.type, sv.uid, sv.name, sv.city, sv.depart, sv.destin,
+		       ST_Y(sv.geom), ST_X(sv.geom)
 		FROM bus_station_stop_map bssm
 		JOIN search_vector sv
 		  ON sv.uid = bssm.sub_route_uid AND sv.type = 'bus_route'
@@ -135,7 +140,7 @@ func expandStationRoutes(ctx context.Context, primary []searchResult, db *pgxpoo
 	var extra []searchResult
 	for rows.Next() {
 		var r searchResult
-		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin); err == nil {
+		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin, &r.Lat, &r.Lon); err == nil {
 			if !seen[r.UID] {
 				extra = append(extra, r)
 				seen[r.UID] = true
@@ -159,7 +164,8 @@ func isNumericQuery(q string) bool {
 
 func trainNumberSearch(ctx context.Context, q string, db *pgxpool.Pool) []searchResult {
 	rows, err := db.Query(ctx, `
-		SELECT type, uid, name, city, depart, destin
+		SELECT type, uid, name, city, depart, destin,
+		       ST_Y(geom), ST_X(geom)
 		FROM search_vector
 		WHERE uid = $1 AND type IN ('tra_train', 'thsr_train')`,
 		q,
@@ -172,7 +178,7 @@ func trainNumberSearch(ctx context.Context, q string, db *pgxpool.Pool) []search
 	var results []searchResult
 	for rows.Next() {
 		var r searchResult
-		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin); err == nil {
+		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin, &r.Lat, &r.Lon); err == nil {
 			results = append(results, r)
 		}
 	}

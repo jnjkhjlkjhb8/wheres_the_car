@@ -35,6 +35,10 @@ func makethatsame(subRouteUID string) string {
 	return subRouteUID
 }
 
+func busRouteEtaKey(subRouteUID string) string {
+	return fmt.Sprintf("bus_eta_route:%s", makethatsame(subRouteUID))
+}
+
 func connectredis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:         os.Getenv("REDIS_ADDR"),
@@ -527,15 +531,14 @@ func (s *BusRouteserver) BusRouteStatic(ctx context.Context, in *pb.Bus_Ask_Rout
 }
 func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_Service_EtaServer) error {
 	log.Printf("call Bus_route_eta %s", in.SubRouteUID)
-	route := makethatsame(in.SubRouteUID)
-	sub := s.rc.Subscribe(fmt.Sprintf("bus_eta_route:%s", route))
-	val := s.rc.Get(fmt.Sprintf("bus_eta_route:%s", route))
-	resp := &pb.Resp_BusEta{
-		Data: []byte(val.Val()),
-	}
-	if err := stream.Send(resp); err != nil {
-		log.Printf("[gRPC] action=bus_route_eta event=send_failed error=%v", err)
-		return err
+	key := busRouteEtaKey(in.SubRouteUID)
+	sub := s.rc.Subscribe(key)
+	if val, err := s.rc.Get(key).Bytes(); err == nil && len(val) > 0 {
+		resp := &pb.Resp_BusEta{Data: val}
+		if err := stream.Send(resp); err != nil {
+			log.Printf("[gRPC] action=bus_route_eta event=send_failed error=%v", err)
+			return err
+		}
 	}
 	defer func(sub *redis.PubSub) {
 		_ = sub.Close()

@@ -42,6 +42,10 @@ var citymap2 = map[string]string{
 	"PEN": "Penghu", "KIN": "Kinmen", "LIE": "Lienchiang",
 }
 
+func busRouteEtaKey(subRouteUID string) string {
+	return fmt.Sprintf("bus_eta_route:%s", subRouteUID)
+}
+
 type rawBusRoute struct {
 	RouteUID  string `json:"RouteUID"`
 	RouteName struct {
@@ -946,8 +950,9 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 	}
 	for uid, pb := range routes {
 		data, _ := proto.Marshal(pb)
-		pipe.Set(fmt.Sprintf("bus_eta_route:%s", uid), data, 180*time.Second)
-		pipe.Publish(fmt.Sprintf("bus_eta_route:%s", uid), data)
+		key := busRouteEtaKey(uid)
+		pipe.Set(key, data, 180*time.Second)
+		pipe.Publish(key, data)
 	}
 	_, err = pipe.Exec()
 	if err != nil {
