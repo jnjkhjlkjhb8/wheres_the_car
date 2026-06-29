@@ -60,6 +60,29 @@ func main() {
 	busDailyroute(c, rc)
 	loadHolidays()
 	loadModel()
+	if os.Getenv("FREEZE_DATA") != "" {
+		ctx := context.Background()
+		log.Println("[FREEZE] action=load event=start")
+		busStatic(ctx, c, rc, db)
+		bikeStatic(ctx, c, rc, db)
+		mrtStatic(ctx, c, rc, db)
+		railStatic(ctx, c, rc, db)
+		changetovector(ctx, rc, db)
+		bikeEta(c, rc)
+		busEta(ctx, c, rc, db, dispatcher)
+		mrtEta(c, rc)
+		traEta(c, rc)
+		weatherSync(rc)
+		keys, _ := rc.Keys("*").Result()
+		for _, k := range keys {
+			rc.Persist(k)
+		}
+		log.Printf("[FREEZE] action=load event=end cron=disabled persisted=%d", len(keys))
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+		<-sig
+		return
+	}
 	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
