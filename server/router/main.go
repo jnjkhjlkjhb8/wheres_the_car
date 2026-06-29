@@ -39,6 +39,10 @@ func busRouteEtaKey(subRouteUID string) string {
 	return fmt.Sprintf("bus_eta_route:%s", makethatsame(subRouteUID))
 }
 
+func usableBusEtaPayload(data []byte) bool {
+	return len(data) > 0
+}
+
 func connectredis() *redis.Client {
 	client := redis.NewClient(&redis.Options{
 		Addr:         os.Getenv("REDIS_ADDR"),
@@ -533,7 +537,7 @@ func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_S
 	log.Printf("call Bus_route_eta %s", in.SubRouteUID)
 	key := busRouteEtaKey(in.SubRouteUID)
 	sub := s.rc.Subscribe(key)
-	if val, err := s.rc.Get(key).Bytes(); err == nil && len(val) > 0 {
+	if val, err := s.rc.Get(key).Bytes(); err == nil && usableBusEtaPayload(val) {
 		resp := &pb.Resp_BusEta{Data: val}
 		if err := stream.Send(resp); err != nil {
 			log.Printf("[gRPC] action=bus_route_eta event=send_failed error=%v", err)
@@ -549,7 +553,11 @@ func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_S
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		case val := <-ch:
-			resp := &pb.Resp_BusEta{Data: []byte(val.Payload)}
+			data := []byte(val.Payload)
+			if !usableBusEtaPayload(data) {
+				continue
+			}
+			resp := &pb.Resp_BusEta{Data: data}
 			if err := stream.Send(resp); err != nil {
 				log.Printf("[gRPC] action=bus_route_eta event=send_failed error=%v", err)
 				return err
@@ -560,13 +568,12 @@ func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_S
 func (s *BusRouteserver) BusStationEta(in *pb.Bus_Ask_Station, stream pb.Bus_Station_Service_EtaServer) error {
 	log.Printf("call Bus_station_eta %s", in.StationName)
 	sub := s.rc.Subscribe(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName))
-	val := s.rc.Get(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName))
-	resp := &pb.Resp_BusEta{
-		Data: []byte(val.Val()),
-	}
-	if err := stream.Send(resp); err != nil {
-		log.Printf("[gRPC] action=bus_station_eta event=send_failed error=%v", err)
-		return err
+	if val, err := s.rc.Get(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName)).Bytes(); err == nil && usableBusEtaPayload(val) {
+		resp := &pb.Resp_BusEta{Data: val}
+		if err := stream.Send(resp); err != nil {
+			log.Printf("[gRPC] action=bus_station_eta event=send_failed error=%v", err)
+			return err
+		}
 	}
 	defer func(sub *redis.PubSub) {
 		_ = sub.Close()
@@ -577,7 +584,11 @@ func (s *BusRouteserver) BusStationEta(in *pb.Bus_Ask_Station, stream pb.Bus_Sta
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		case val := <-ch:
-			resp := &pb.Resp_BusEta{Data: []byte(val.Payload)}
+			data := []byte(val.Payload)
+			if !usableBusEtaPayload(data) {
+				continue
+			}
+			resp := &pb.Resp_BusEta{Data: data}
 			if err := stream.Send(resp); err != nil {
 				log.Printf("[gRPC] action=bus_station_eta event=send_failed error=%v", err)
 				return err
