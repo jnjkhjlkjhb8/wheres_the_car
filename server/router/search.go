@@ -59,8 +59,7 @@ func embedQuery(text string) ([]float32, error) {
 func vectorSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([]searchResult, error) {
 	vec, embedErr := embedQuery(q)
 	if embedErr != nil {
-		log.Printf("[SEARCH] embed failed, using text fallback: %v", embedErr)
-		return textFallback(ctx, q, limit, db)
+		return nil, embedErr
 	}
 	rows, err := db.Query(ctx, `
 		SELECT type, uid, name, city, depart, destin,
@@ -84,16 +83,29 @@ func vectorSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 	return results, nil
 }
 
-func textFallback(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([]searchResult, error) {
+func textSearch(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([]searchResult, error) {
 	rows, err := db.Query(ctx, `
 		SELECT type, uid, name, city, depart, destin,
 		       ST_Y(geom), ST_X(geom)
 		FROM search_vector
-		WHERE name % $1
-		   OR name  ILIKE '%' || $1 || '%'
+		WHERE uid = $1
+		   OR name ILIKE $1 || '%'
+		   OR name % $1
+		   OR name ILIKE '%' || $1 || '%'
 		   OR depart ILIKE '%' || $1 || '%'
 		   OR destin ILIKE '%' || $1 || '%'
-		ORDER BY similarity(name, $1) DESC
+		ORDER BY
+		  CASE
+		    WHEN uid = $1 THEN 0
+		    WHEN name = $1 THEN 1
+		    WHEN name ILIKE $1 || '%' THEN 2
+		    WHEN name % $1 THEN 3
+		    WHEN depart ILIKE '%' || $1 || '%'
+		      OR destin ILIKE '%' || $1 || '%' THEN 4
+		    ELSE 5
+		  END,
+		  similarity(name, $1) DESC,
+		  name ASC
 		LIMIT $2`,
 		q, limit,
 	)
@@ -111,11 +123,37 @@ func textFallback(ctx context.Context, q string, limit int, db *pgxpool.Pool) ([
 	return results, nil
 }
 
+func searchResultKey(r searchResult) string {
+	return r.Type + ":" + r.UID
+}
+
+func mergeSearchResults(limit int, groups ...[]searchResult) []searchResult {
+	if limit <= 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	merged := make([]searchResult, 0, limit)
+	for _, group := range groups {
+		for _, r := range group {
+			key := searchResultKey(r)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged = append(merged, r)
+			if len(merged) >= limit {
+				return merged
+			}
+		}
+	}
+	return merged
+}
+
 func expandStationRoutes(ctx context.Context, primary []searchResult, db *pgxpool.Pool) []searchResult {
 	var stationNames []string
 	seen := make(map[string]bool)
 	for _, r := range primary {
-		seen[r.UID] = true
+		seen[searchResultKey(r)] = true
 		if r.Type == "bus_station" {
 			stationNames = append(stationNames, r.Name)
 		}
@@ -141,9 +179,10 @@ func expandStationRoutes(ctx context.Context, primary []searchResult, db *pgxpoo
 	for rows.Next() {
 		var r searchResult
 		if err := rows.Scan(&r.Type, &r.UID, &r.Name, &r.City, &r.Depart, &r.Destin, &r.Lat, &r.Lon); err == nil {
-			if !seen[r.UID] {
+			key := searchResultKey(r)
+			if !seen[key] {
 				extra = append(extra, r)
-				seen[r.UID] = true
+				seen[key] = true
 			}
 		}
 	}
@@ -160,6 +199,10 @@ func isNumericQuery(q string) bool {
 		}
 	}
 	return true
+}
+
+func shouldUseVector(q string) bool {
+	return len([]rune(q)) >= 2 && !isNumericQuery(q)
 }
 
 func trainNumberSearch(ctx context.Context, q string, db *pgxpool.Pool) []searchResult {
@@ -187,7 +230,7 @@ func trainNumberSearch(ctx context.Context, q string, db *pgxpool.Pool) []search
 
 func handleSearch(db *pgxpool.Pool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		q := c.Query("q")
+		q := strings.TrimSpace(c.Query("q"))
 		if len(q) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "q required"})
 			return
@@ -201,25 +244,22 @@ func handleSearch(db *pgxpool.Pool) gin.HandlerFunc {
 		if isNumericQuery(q) {
 			trainResults = trainNumberSearch(ctx, q, db)
 		}
-		results, err := vectorSearch(ctx, q, limit, db)
+		textResults, err := textSearch(ctx, q, limit, db)
 		if err != nil {
 			log.Printf("[SEARCH] error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "search failed"})
 			return
 		}
-		results = expandStationRoutes(ctx, results, db)
-		if len(trainResults) > 0 {
-			seen := make(map[string]bool)
-			for _, r := range trainResults {
-				seen[r.UID+r.Type] = true
+		results := mergeSearchResults(limit, trainResults, textResults)
+		if len(results) < limit && shouldUseVector(q) {
+			vectorResults, err := vectorSearch(ctx, q, limit, db)
+			if err != nil {
+				log.Printf("[SEARCH] vector supplement skipped: %v", err)
+			} else {
+				results = mergeSearchResults(limit, results, vectorResults)
 			}
-			for _, r := range results {
-				if !seen[r.UID+r.Type] {
-					trainResults = append(trainResults, r)
-				}
-			}
-			results = trainResults
 		}
+		results = mergeSearchResults(limit, expandStationRoutes(ctx, results, db))
 		c.JSON(http.StatusOK, gin.H{"results": results})
 	}
 }
