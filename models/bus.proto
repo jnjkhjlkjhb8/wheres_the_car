@@ -94,6 +94,7 @@ message Bus_RouteEstimate{
   int32 Stop_status = 5;
   string src_update_time = 6;
   repeated Bus_position Buses = 7;
+  int32 StopSequence = 8;
 }
 message Bus_StopEstimate{
   string stop_uid = 1;

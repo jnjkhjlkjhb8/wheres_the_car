@@ -941,6 +941,7 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 			NextBusTime:   eta.NextBusTime,
 			SrcUpdateTime: stime,
 			Buses:         busmap[uid],
+			StopSequence:  int32(b.StopSequence),
 		})
 	}
 	pipe := rc.Pipeline()
