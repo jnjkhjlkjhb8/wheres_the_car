@@ -10,11 +10,50 @@ bucket_definitions:
             depart,
             destin
           FROM bus_static
-      - SELECT stop_uid, stop_name, lat, lon, city FROM bus_stops
-      - SELECT station_id, station_name, lines, lat, lon FROM mrt_stations
-      - SELECT station_id, station_name, lat, lon FROM tra_stations
-      - SELECT station_id, station_name, lat, lon FROM thsr_stations
-      - SELECT from_station_id, to_station_id, system, travel_time_min, fare_nt FROM mrt_journey_matrix
-      - SELECT station_id, lineid, destinationstaionid, serviceday, first_train_time, last_train_time FROM mrt_schedule
-
-
+      - SELECT
+            stop_uid AS id,
+            stop_uid,
+            stop_name,
+            lat,
+            lon,
+            city
+          FROM bus_stops
+      - SELECT
+            station_id AS id,
+            station_id,
+            station_name,
+            lines,
+            lat,
+            lon
+          FROM mrt_stations
+      - SELECT
+            station_id AS id,
+            station_id,
+            station_name,
+            lat,
+            lon
+          FROM tra_stations
+      - SELECT
+            station_id AS id,
+            station_id,
+            station_name,
+            lat,
+            lon
+          FROM thsr_stations
+      - SELECT
+            COALESCE(from_station_id::text, '') || ':' || COALESCE(to_station_id::text, '') || ':' || COALESCE(system::text, '') AS id,
+            from_station_id,
+            to_station_id,
+            system,
+            travel_time_min,
+            fare_nt
+          FROM mrt_journey_matrix
+      - SELECT
+            COALESCE(station_id::text, '') || ':' || COALESCE(lineid::text, '') || ':' || COALESCE(destinationstaionid::text, '') || ':' || COALESCE(serviceday::text, '') AS id,
+            station_id,
+            lineid,
+            destinationstaionid,
+            serviceday,
+            first_train_time,
+            last_train_time
+          FROM mrt_schedule
