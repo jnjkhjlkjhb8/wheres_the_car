@@ -382,6 +382,10 @@ func (s *BikeServer) Eta(in *pb.BikeRequest, stream pb.Bike_Service_EtaServer) e
 	return s.bikeEta(in, stream)
 }
 
+func (s *MrtServer) Eta(in *pb.AskMrt, stream pb.Mrt_Service_EtaServer) error {
+	return s.MrtEta(in, stream)
+}
+
 func (s *Tra_StationServer) LiveBoard(in *pb.AskStaiton, stream pb.TRAStationService_LiveBoardServer) error {
 	return s.traLiveboard(in, stream)
 }

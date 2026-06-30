@@ -612,11 +612,11 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 	}
 }
 
-const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR sub_route_uid like $2+%)`
+const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR destin = $2 OR sub_route_uid LIKE $3)`
 
 func hasBusRawStatic(ctx context.Context, db *pgxpool.Pool, city string, api string) bool {
 	var n int
-	if err := db.QueryRow(ctx, busRawStaticExistsSQL, api, city).Scan(&n); err != nil {
+	if err := db.QueryRow(ctx, busRawStaticExistsSQL, api, city, citymap[city]+"%").Scan(&n); err != nil {
 		log.Printf("[BUS_STATIC] action=raw_exists city=%s api=%s event=query_error error=%v", city, api, err)
 		return true
 	}
