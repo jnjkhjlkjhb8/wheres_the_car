@@ -14,9 +14,12 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/server/obs"
 )
 
 func main() {
+	defer obs.Init("functions")()
+	defer obs.Recover("main")
 	//r := cron.New(cron.WithSeconds())
 	c := resty.New()
 	rc := connectredis()
@@ -161,6 +164,10 @@ func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*
 		}
 		log.Printf("[RUN] action=no update=%s", name)
 		return &json.Decoder{}, false, nil, nil
+	}
+	if resp.StatusCode() >= 400 {
+		_ = resp.RawResponse.Body.Close()
+		return &json.Decoder{}, false, fmt.Errorf("tdx %s: status %d", name, resp.StatusCode()), nil
 	}
 	rc.Set("LastTimeGet_"+name, resp.Header().Get("Last-Modified"), 0)
 	decorder := json.NewDecoder(resp.RawResponse.Body)

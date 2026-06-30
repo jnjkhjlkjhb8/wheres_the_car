@@ -16,6 +16,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	pb "github.com/jnjkhjlkjhb8/wheres_the_car/models"
+	"github.com/jnjkhjlkjhb8/wheres_the_car/server/obs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
@@ -206,6 +207,7 @@ func allowRequest(ctx context.Context, rl *rateLimiter, limit int, window time.D
 }
 
 func main() {
+	defer obs.Init("router")()
 	rc := connectredis()
 	db := connectdb()
 	c := resty.New()
@@ -254,10 +256,12 @@ func main() {
 	}
 	serverOptions := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
+			obs.UnaryInterceptor(),
 			rateLimitInterceptor(rl, 30, time.Second),
 			appCheckUnaryInterceptor(appCheckVerifier, enforceAppCheck),
 		),
 		grpc.ChainStreamInterceptor(
+			obs.StreamInterceptor(),
 			rateLimitStreamInterceptor(rl, 30, time.Second),
 			appCheckStreamInterceptor(appCheckVerifier, enforceAppCheck),
 		),

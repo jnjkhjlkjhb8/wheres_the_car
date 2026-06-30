@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -28,6 +29,7 @@ func startHTTPServer(db *pgxpool.Pool) {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
+	r.Use(sentrygin.New(sentrygin.Options{Repanic: true}))
 	r.GET("/api/token/powersync", handleToken(key))
 	r.GET("/api/.well-known/jwks.json", handleJWKS(key))
 	r.POST("/api/embed", handleEmbed())
