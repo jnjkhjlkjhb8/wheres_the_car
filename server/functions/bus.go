@@ -552,12 +552,14 @@ func savestations(ctx context.Context, db *pgxpool.Pool, city string) {
 									  station_uid,
 									  station_name,
 									  city,
-									  position
+									  position,
+									  updated_at
 			)
 			SELECT sub_route_uid,route_name,depart,
-				   ST_SetSRID(ST_MakePoint((content->'StationPosition'->>'PositionLon')::float,(content->'StationPosition'->>'PositionLat')::float), 4326)
+				   ST_SetSRID(ST_MakePoint((content->'StationPosition'->>'PositionLon')::float,(content->'StationPosition'->>'PositionLat')::float), 4326),
+				   NOW()
 			FROM raw_bus_route WHERE type = 'Station' AND depart = $1
-			ON CONFLICT (station_uid) DO UPDATE SET station_name = EXCLUDED.station_name, position = EXCLUDED.position
+			ON CONFLICT (station_uid) DO UPDATE SET station_name = EXCLUDED.station_name, position = EXCLUDED.position, updated_at = NOW()
 			`
 	if _, err := db.Exec(ctx, c1, city); err != nil {
 		log.Printf("[BUS] action=savestations city=%s event=insert_error error=%v", city, err)
@@ -715,11 +717,12 @@ func savestatictodb(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mode
                                   route_name,
                                   direction,
                                   stop_uid,
-                                  stop_sequence
+                                  stop_sequence,
+                                  updated_at
 									)
-									SELECT DISTINCT ON (sruid, suid, dir) sid, sname, sruid, rname, dir, suid, seq FROM temp_map
+									SELECT DISTINCT ON (sruid, suid, dir) sid, sname, sruid, rname, dir, suid, seq, NOW() FROM temp_map
 									ON CONFLICT (sub_route_uid, stop_uid, direction) DO UPDATE
-									SET station_name = EXCLUDED.station_name, route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence;`); err != nil {
+									SET station_name = EXCLUDED.station_name, route_name = EXCLUDED.route_name, stop_sequence = EXCLUDED.stop_sequence, updated_at = NOW();`); err != nil {
 			log.Printf("[BUS] action=savestatictodb event=insert_map_error error=%v", err)
 		} else {
 			log.Printf("[BUS] action=savestatictodb event=insert_map_success row_count=%d", len(mp))

@@ -69,3 +69,13 @@ ds-bundle/
 ds/dist/
 ds/node_modules/
 node_modules
+
+# Secrets / local runtime data (never commit)
+dev.env
+*.env
+dump.rdb
+*.hive
+*.lock
+!pubspec.lock
+.firebaserc
+**/firebase_options.dart

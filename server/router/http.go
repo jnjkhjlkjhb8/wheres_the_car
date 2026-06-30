@@ -16,7 +16,6 @@ import (
 
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
-	"github.com/go-resty/resty/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -32,7 +31,6 @@ func startHTTPServer(db *pgxpool.Pool) {
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: true}))
 	r.GET("/api/token/powersync", handleToken(key))
 	r.GET("/api/.well-known/jwks.json", handleJWKS(key))
-	r.POST("/api/embed", handleEmbed())
 	r.GET("/api/search", handleSearch(db))
 	log.Printf("[HTTP] server running on 0.0.0.0:8080")
 	if err := r.Run("0.0.0.0:8080"); err != nil {
@@ -66,47 +64,6 @@ func handleJWKS(key *rsa.PrivateKey) gin.HandlerFunc {
 		}},
 	}
 	return func(c *gin.Context) { c.JSON(200, body) }
-}
-func handleEmbed() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var req struct {
-			Text string `json:"text" binding:"required"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"error": err.Error()})
-			return
-		}
-		client := resty.New().SetHeader("Content-Type", "application/json")
-		resp, err := client.R().
-			SetBody(map[string]interface{}{
-				"model": "qwen3-embedding:0.6b",
-				"input": []string{req.Text},
-			}).
-			Post("http://ollama:11434/api/embed")
-		if err != nil {
-			log.Printf("[HTTP] embed request failed: %v", err)
-			c.JSON(500, gin.H{"error": "embed failed"})
-			return
-		}
-		if resp.StatusCode() != 200 {
-			log.Printf("[HTTP] ollama returned %d: %s", resp.StatusCode(), resp.Body())
-			c.JSON(502, gin.H{"error": "embed upstream error"})
-			return
-		}
-		var result struct {
-			Embeddings [][]float32 `json:"embeddings"`
-		}
-		if err := json.Unmarshal(resp.Body(), &result); err != nil || len(result.Embeddings) == 0 {
-			log.Printf("[HTTP] embed parse failed: %v body=%s", err, resp.Body())
-			c.JSON(500, gin.H{"error": "parse failed"})
-			return
-		}
-		out := make([]float64, len(result.Embeddings[0]))
-		for i, f := range result.Embeddings[0] {
-			out[i] = float64(f)
-		}
-		c.JSON(200, gin.H{"vector": out})
-	}
 }
 func signRS256(key *rsa.PrivateKey, claims map[string]any) (string, error) {
 	header := b64j(map[string]string{"alg": "RS256", "typ": "JWT", "kid": "k1"})

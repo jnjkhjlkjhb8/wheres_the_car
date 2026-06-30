@@ -569,11 +569,12 @@ func traFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 				origin_station_id,
 				destination_station_id,
 				ticket_type,
-				price
+				price,
+				updated_at
 			)
-			SELECT origin_station_id, destination_station_id, ticket_type, price FROM temp_tra_fare
-			ON CONFLICT (origin_station_id, destination_station_id, ticket_type) 
-			DO UPDATE SET price = EXCLUDED.price`
+			SELECT origin_station_id, destination_station_id, ticket_type, price, NOW() FROM temp_tra_fare
+			ON CONFLICT (origin_station_id, destination_station_id, ticket_type)
+			DO UPDATE SET price = EXCLUDED.price, updated_at = NOW()`
 	b, err := db.Begin(ctx)
 	if err != nil {
 		log.Printf("[RAIL] action=tra_fare event=begin_error error=%v", err)
@@ -637,11 +638,12 @@ func thsrFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *p
 				ticket_type,
 				fare_class,
 				cabin_class,
-				price
+				price,
+				updated_at
 			)
-			SELECT origin_station_id, destination_station_id, ticket_type, fare_class,cabin_class,price FROM temp_thsr
-			ON CONFLICT (origin_station_id, destination_station_id, ticket_type, fare_class, cabin_class) 
-			DO UPDATE SET price = EXCLUDED.price`
+			SELECT origin_station_id, destination_station_id, ticket_type, fare_class,cabin_class,price, NOW() FROM temp_thsr
+			ON CONFLICT (origin_station_id, destination_station_id, ticket_type, fare_class, cabin_class)
+			DO UPDATE SET price = EXCLUDED.price, updated_at = NOW()`
 	b, err := db.Begin(ctx)
 	if err != nil {
 		log.Printf("[RAIL] action=thsr_fare event=begin_error error=%v", err)

@@ -924,7 +924,7 @@ func (s *Near_Server) FindNear(stream pb.Near_Station_Service_NearServer) error 
 		l2 = lat
 		l3 = int(r)
 		log.Printf("[gRPC] received location: lon=%f lat=%f radius=%d", lon, lat, r)
-		resp, err := findnearstation(l1, l2, l3, ctx, s.db, s.osrmClient)
+		resp, err := findnearstation(l2, l1, l3, ctx, s.db, s.osrmClient)
 		if err != nil {
 			log.Printf("[gRPC] action=findnearstation failed error=%v", err)
 			return err

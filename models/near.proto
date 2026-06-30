@@ -28,4 +28,5 @@ message NearStation{
   double PositionLon = 5;
   double PositionLat = 6;
   int32 walk = 7;
+  int32 distance = 8;
 }

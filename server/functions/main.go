@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +26,7 @@ func main() {
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
+	ingestDB = db
 	sender, err := newFirebaseSender(context.Background())
 	if err != nil {
 		log.Fatal(err)
@@ -149,8 +152,76 @@ func main() {
 	log.Println("在關了，沒看到嗎？")*/
 }
 
+var ingestDB *pgxpool.Pool
+
+var busStaticPrefixes = []string{"bus_StopOfRoute", "bus_Route", "bus_Shape", "bus_Schedule", "bus_Station", "bus_Fare", "bus_Operator", "DailyTimeTable"}
+
+func busStaticCity(name string) (string, bool) {
+	for _, p := range busStaticPrefixes {
+		if strings.HasPrefix(name, p) {
+			return strings.TrimPrefix(name, p), true
+		}
+	}
+	return "", false
+}
+
+func dbSince(name string) string {
+	if ingestDB == nil {
+		return ""
+	}
+	var q string
+	var arg any
+	switch {
+	case strings.HasPrefix(name, "tra_traindate_"):
+		q = "SELECT MAX(updated_at) FROM tra_timetable WHERE train_date=$1"
+		arg = strings.TrimPrefix(name, "tra_traindate_")
+	case strings.HasPrefix(name, "thsr_traindate_"):
+		q = "SELECT MAX(updated_at) FROM thsr_timetable WHERE train_date=$1"
+		arg = strings.TrimPrefix(name, "thsr_traindate_")
+	case name == "tra_stations":
+		q = "SELECT MAX(updated_at) FROM tra_stations"
+	case name == "thsr_stations":
+		q = "SELECT MAX(updated_at) FROM thsr_stations"
+	case name == "tra_fare":
+		q = "SELECT MAX(updated_at) FROM tra_fares"
+	case name == "thsr_fare":
+		q = "SELECT MAX(updated_at) FROM thsr_fares"
+	case strings.HasPrefix(name, "mrt_stations"):
+		q = "SELECT MAX(updated_at) FROM mrt_station WHERE system=$1"
+		arg = strings.TrimPrefix(name, "mrt_stations")
+	case strings.HasPrefix(name, "mrt_firstlast"):
+		q = "SELECT MAX(updated_at) FROM mrt_schedule WHERE system=$1"
+		arg = strings.TrimPrefix(name, "mrt_firstlast")
+	case strings.HasPrefix(name, "bike_stations"):
+		q = "SELECT MAX(updated_at) FROM bike_stations WHERE city=$1"
+		arg = strings.TrimPrefix(name, "bike_stations")
+	default:
+		city, ok := busStaticCity(name)
+		if !ok || city == "" {
+			return ""
+		}
+		q = "SELECT MAX(created_at) FROM raw_bus_route WHERE depart=$1 OR destin=$1"
+		arg = city
+	}
+	ctx := context.Background()
+	var t *time.Time
+	var err error
+	if arg != nil {
+		err = ingestDB.QueryRow(ctx, q, arg).Scan(&t)
+	} else {
+		err = ingestDB.QueryRow(ctx, q).Scan(&t)
+	}
+	if err != nil || t == nil {
+		return ""
+	}
+	return t.UTC().Format(http.TimeFormat)
+}
+
 func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*json.Decoder, bool, error, func()) {
 	since, _ := rc.Get("LastTimeGet_" + name).Result()
+	if since == "" {
+		since = dbSince(name)
+	}
 	resp, err := client.R().
 		SetHeader("If-Modified-Since", since).
 		Get(url)
