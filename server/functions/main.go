@@ -22,7 +22,7 @@ import (
 func main() {
 	defer obs.Init("functions")()
 	defer obs.Recover("main")
-	//r := cron.New(cron.WithSeconds())
+	r := cron.New(cron.WithSeconds())
 	c := resty.New()
 	rc := connectredis()
 	db := connectdb()
@@ -88,13 +88,7 @@ func main() {
 		<-sig
 		return
 	}
-	ctx := context.Background()
-	busStatic(ctx, c, rc, db)
-	bikeStatic(ctx, c, rc, db)
-	mrtStatic(ctx, c, rc, db)
-	railStatic(ctx, c, rc, db)
-	changetovector(ctx, rc, db)
-	/*_, _ = r.AddFunc("0 0 3 * * *", func() {
+	_, _ = r.AddFunc("0 0 3 * * *", func() {
 		ctx := context.Background()
 		log.Println("[crontab] action=daily event=start")
 		busStatic(ctx, c, rc, db)
@@ -149,7 +143,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	log.Println("在關了，沒看到嗎？")*/
+	log.Println("在關了，沒看到嗎？")
 }
 
 var ingestDB *pgxpool.Pool
