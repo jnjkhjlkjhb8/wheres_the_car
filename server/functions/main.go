@@ -196,12 +196,6 @@ func dbSince(name string) string {
 		q = "SELECT MAX(updated_at) FROM bike_stations WHERE city=$1"
 		arg = strings.TrimPrefix(name, "bike_stations")
 	default:
-		city, ok := busStaticCity(name)
-		if !ok || city == "" {
-			return ""
-		}
-		q = "SELECT MAX(created_at) FROM raw_bus_route WHERE depart=$1 OR destin=$1"
-		arg = city
 	}
 	ctx := context.Background()
 	var t *time.Time
