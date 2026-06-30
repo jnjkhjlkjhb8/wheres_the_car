@@ -13,6 +13,7 @@ COPY models/ ./models/
 RUN protoc --go_out=paths=source_relative:models \
            --go-grpc_out=paths=source_relative:models \
            -I models models/*.proto
+COPY server/obs/ ./server/obs/
 COPY server/router/ ./server/router/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o router ./server/router
 FROM alpine:3.23
