@@ -378,7 +378,13 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		target = fmt.Sprintf("/v2/Bus/%s/City/%s", api, city)
 	}
 	log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_call", city, api)
-	dec, comp, err, flipopen := callApi(client, rc, target, "bus_"+api+city)
+	cacheKey := "bus_" + api + city
+	dec, comp, err, flipopen := callApi(client, rc, target, cacheKey)
+	if err == nil && !comp && !hasBusRawStatic(ctx, db, city, api) {
+		_ = rc.Del("LastTimeGet_" + cacheKey).Err()
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=retry reason=local_empty", city, api)
+		dec, comp, err, flipopen = callApi(client, rc, target, cacheKey)
+	}
 	if err != nil || !comp {
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_skip reason=empty", city, api)
 		return
@@ -513,6 +519,18 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		}
 	}
 }
+
+const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR destin = $2)`
+
+func hasBusRawStatic(ctx context.Context, db *pgxpool.Pool, city string, api string) bool {
+	var n int
+	if err := db.QueryRow(ctx, busRawStaticExistsSQL, api, city).Scan(&n); err != nil {
+		log.Printf("[BUS_STATIC] action=raw_exists city=%s api=%s event=query_error error=%v", city, api, err)
+		return true
+	}
+	return n > 0
+}
+
 func mask(mon, tues, wed, thur, fri, satur, sun bool, nationalHoliday ...bool) uint8 {
 	var res uint8
 	days := []bool{mon, tues, wed, thur, fri, satur, sun}
@@ -535,8 +553,4 @@ func mask2(mon, tues, wed, thur, fri, satur, sun uint8) uint8 {
 		}
 	}
 	return res
-}
-func sleepingwhiledailyupdate() bool {
-	now := time.Now()
-	return now.Hour() == 3 && now.Minute() < 30
 }
