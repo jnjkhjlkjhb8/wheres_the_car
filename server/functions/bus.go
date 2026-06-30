@@ -42,6 +42,49 @@ var citymap2 = map[string]string{
 	"PEN": "Penghu", "KIN": "Kinmen", "LIE": "Lienchiang",
 }
 
+const busSubroutesUpsertSQL = `
+			INSERT INTO bus_subroutes(
+				sub_route_uid,
+				route_uid,
+				direction,
+				route_name,
+				sub_route_name,
+				city,
+				depart,
+				destin,
+				geometry,
+				stops,
+				schedule
+			)
+			SELECT DISTINCT ON (uid, d) uid, rid, d, name1, name2,city,depart,destin,geom,
+				   ARRAY(
+					   SELECT ROW(
+								  s ->> 'StationUID',
+								  s ->> 'StopName',
+								  (s ->> 'StopSequence')::int,
+								  (s ->> 'PositionLon')::float,
+								  (s ->> 'PositionLat')::float
+							  )::stop
+					   FROM jsonb_array_elements(rawstop) AS s
+				   ),schedule
+			FROM temp_bus
+			ORDER BY uid, d
+			ON CONFLICT (sub_route_uid, direction)
+			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule,updated_at = NOW();
+			`
+
+const busScheduleUpsertSQL = `INSERT INTO bus_schedule (sub_route_uid, direction, type, tripid, islowfloor, stopsequence, "stop_uid/MinHeadwayMins", "stop_name/MaxHeadwayMins", "arrival_time/StartTime", "departure_time/EndTime", service_day, updated_at)
+				SELECT DISTINCT ON (uid, dir, type, sdays, id, stopuid)
+					uid, dir, type, id, floor, seq, stopuid, stopname, arrival::time, departure::time, sdays, NOW()
+				FROM temp_bus
+				ORDER BY uid, dir, type, sdays, id, stopuid
+				ON CONFLICT (sub_route_uid, direction, type, service_day, tripid, "stop_uid/MinHeadwayMins")
+				DO UPDATE SET islowfloor = EXCLUDED.islowfloor, stopsequence = EXCLUDED.stopsequence,
+					"stop_name/MaxHeadwayMins" = EXCLUDED."stop_name/MaxHeadwayMins",
+					"arrival_time/StartTime" = EXCLUDED."arrival_time/StartTime",
+					"departure_time/EndTime" = EXCLUDED."departure_time/EndTime",
+					updated_at = NOW()`
+
 func busRouteEtaKey(subRouteUID string) string {
 	return fmt.Sprintf("bus_eta_route:%s", subRouteUID)
 }
@@ -443,35 +486,7 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 			schedule jsonb
                           ) ON COMMIT DROP
 		    `
-	c2 := `
-			INSERT INTO bus_subroutes(
-				sub_route_uid,
-				route_uid,
-				direction,
-				route_name,
-				sub_route_name,
-				city,
-				depart,
-				destin,
-				geometry,
-				stops,
-				schedule
-			)
-			SELECT uid, rid, d, name1, name2,city,depart,destin,geom,
-				   ARRAY(
-					   SELECT ROW(
-								  s ->> 'StationUID',
-								  s ->> 'StopName',
-								  (s ->> 'StopSequence')::int,
-								  (s ->> 'PositionLon')::float,
-								  (s ->> 'PositionLat')::float
-							  )::stop
-					   FROM jsonb_array_elements(rawstop) AS s
-				   ),schedule
-			FROM temp_bus 
-			ON CONFLICT (sub_route_uid, direction)
-			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule,updated_at = NOW();
-			`
+	c2 := busSubroutesUpsertSQL
 	if _, err := b.Exec(ctx, c1); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=create_temp_error error=%v", err)
 	}
@@ -559,14 +574,7 @@ func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 					departure text,
 					sdays smallint
 				) ON COMMIT DROP`
-	c2 := `INSERT INTO bus_schedule (sub_route_uid, direction, type, tripid, islowfloor, stopsequence, "stop_uid/MinHeadwayMins", "stop_name/MaxHeadwayMins", "arrival_time/StartTime", "departure_time/EndTime", service_day, updated_at)
-				SELECT uid, dir, type, id, floor, seq, stopuid, stopname, arrival::time, departure::time, sdays, NOW() FROM temp_bus
-				ON CONFLICT (sub_route_uid, direction, type, service_day, tripid, "stop_uid/MinHeadwayMins")
-				DO UPDATE SET islowfloor = EXCLUDED.islowfloor, stopsequence = EXCLUDED.stopsequence,
-					"stop_name/MaxHeadwayMins" = EXCLUDED."stop_name/MaxHeadwayMins",
-					"arrival_time/StartTime" = EXCLUDED."arrival_time/StartTime",
-					"departure_time/EndTime" = EXCLUDED."departure_time/EndTime",
-					updated_at = NOW()`
+	c2 := busScheduleUpsertSQL
 	defer func(b pgx.Tx, ctx context.Context) {
 		_ = b.Rollback(ctx)
 	}(b, ctx)
