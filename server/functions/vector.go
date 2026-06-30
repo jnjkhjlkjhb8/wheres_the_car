@@ -99,9 +99,9 @@ var (
 	FROM bus_static bs
 	WHERE bs.updated_at >= $1` + freshVectorSkipSQL("bus_route", "bs.sub_route_uid", "bs.updated_at") + `;`
 	busStationsForVectorSQL = `
-	SELECT DISTINCT ON (bs.station_name) bs.station_uid, bs.station_name, bs.city, ST_AsText(bs.position)
-	FROM bus_stations bs
-	WHERE bs.updated_at >= $1` + freshVectorSkipSQL("bus_station", "bs.station_uid", "bs.updated_at") + `;`
+	SELECT bg.group_uid, bg.group_name, bg.city, ST_AsText(bg.position)
+	FROM bus_station_groups bg
+	WHERE bg.updated_at >= $1` + freshVectorSkipSQL("bus_station", "bg.group_uid", "bg.updated_at") + `;`
 	bikeStationsForVectorSQL = `
 	SELECT bs.station_uid, bs.name, bs.city, ST_AsText(bs.geom)
 	FROM bike_stations bs
@@ -137,7 +137,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 	if since == "" {
 		since = time.Time{}.Format(time.RFC3339)
 	}
-	tables := []string{"bus_subroutes", "bus_stations", "bike_stations", "mrt_station", "tra_stations", "thsr_stations"}
+	tables := []string{"bus_subroutes", "bus_station_groups", "bike_stations", "mrt_station", "tra_stations", "thsr_stations"}
 	processBatch := func(table string, input []string, inrow []resp) bool {
 		if len(input) == 0 {
 			return true
@@ -218,7 +218,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					failed = true
 					return
 				}
-			case "bus_stations":
+			case "bus_station_groups":
 				rows, _ := db.Query(ctx, busStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
@@ -230,7 +230,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 						continue
 					}
 					cn := cityName(city)
-					text := fmt.Sprintf("類型：公車站牌 站點UID：%s 站點名稱：%s 縣市：%s 位置：%s", uid, name, cn, geom)
+					text := fmt.Sprintf("類型：公車組站位 組站位UID：%s 組站位名稱：%s 縣市：%s 位置：%s", uid, name, cn, geom)
 					input = append(input, text)
 					inrow = append(inrow, resp{Type: "bus_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {

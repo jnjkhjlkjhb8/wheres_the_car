@@ -80,26 +80,22 @@ func findnearstation(lat, lon float64, size int, ctx context.Context, db *pgxpoo
 	wg.Add(5)
 	go func() {
 		defer wg.Done()
-		rows, _ := db.Query(ctx, `SELECT station_uid, station_name, city, position <-> ST_MakePoint($1,$2)::geography AS distance,ST_X(position) AS lon ,ST_Y(position) AS lat FROM bus_stations ORDER BY position <-> ST_MakePoint($1,$2)::geography LIMIT $3;`, lon, lat, size*10)
+		rows, _ := db.Query(ctx, `SELECT group_uid AS station_uid, group_name AS station_name, city, position <-> ST_MakePoint($1,$2)::geography AS distance, ST_X(position) AS lon, ST_Y(position) AS lat FROM bus_station_groups ORDER BY position <-> ST_MakePoint($1,$2)::geography LIMIT $3;`, lon, lat, size*5)
 		defer rows.Close()
 		row, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[busStations])
 		if err != nil {
 			rows.Close()
 			log.Println(err.Error())
 		}
-		visit := make(map[string]bool)
 		cnt := 1
 		arr := []string{fmt.Sprintf("%f,%f", lon, lat)}
 		ids := make([]string, 0, len(row))
 		mp := make(map[string]int)
 		for _, r := range row {
-			if !visit[r.Name] {
-				visit[r.Name] = true
-				arr = append(arr, fmt.Sprintf("%f,%f", r.Lon, r.Lat))
-				ids = append(ids, strconv.Itoa(cnt))
-				mp[r.StationUid] = cnt - 1
-				cnt++
-			}
+			arr = append(arr, fmt.Sprintf("%f,%f", r.Lon, r.Lat))
+			ids = append(ids, strconv.Itoa(cnt))
+			mp[r.StationUid] = cnt - 1
+			cnt++
 		}
 		var osrmresp osrm
 		yes := false

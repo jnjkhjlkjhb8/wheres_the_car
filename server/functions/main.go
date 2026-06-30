@@ -336,11 +336,16 @@ func callApi(client *resty.Client, rc *redis.Client, url string, name string) (*
 	}
 */
 func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]busStationmap, error) {
-	query := `SELECT bssm.station_id, bssm.station_name, bssm.sub_route_uid, bssm.route_name,
+	query := `SELECT bssm.station_id, bssm.station_name,
+	                 COALESCE(bsgm.group_uid, bssm.station_id),
+	                 COALESCE(bg.group_name, bssm.station_name),
+	                 bssm.sub_route_uid, bssm.route_name,
 	                 bssm.direction, bssm.stop_uid, bssm.stop_sequence,
 	                 COALESCE(ST_Y(bs.position), 0), COALESCE(ST_X(bs.position), 0)
 	          FROM bus_station_stop_map bssm
 	          LEFT JOIN bus_stations bs ON bs.station_uid = bssm.station_id
+	          LEFT JOIN bus_station_group_members bsgm ON bsgm.station_uid = bssm.station_id
+	          LEFT JOIN bus_station_groups bg ON bg.group_uid = bsgm.group_uid
 	          WHERE bssm.sub_route_uid LIKE $1`
 	rows, err := db.Query(ctx, query, city+"%")
 	if err != nil {
@@ -350,8 +355,8 @@ func busstaticmp(ctx context.Context, db *pgxpool.Pool, city string) ([]busStati
 	var list []busStationmap
 	for rows.Next() {
 		var temp busStationmap
-		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.SubRouteUID,
-			&temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence,
+		err := rows.Scan(&temp.StationUID, &temp.StationName, &temp.GroupUID,
+			&temp.GroupName, &temp.SubRouteUID, &temp.SubRouteName, &temp.Direction, &temp.StopUID, &temp.StopSequence,
 			&temp.Lat, &temp.Lon)
 		if err != nil {
 			fmt.Println(err)
@@ -543,6 +548,15 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			}
 			rawRows = append(rawRows, []interface{}{
 				t.StationUID, -1, t.StationID, t.StationName.Zhtw, "", city, "", api, raw,
+			})
+		case "StationGroup":
+			var t rawBusStationGroup
+			err := json.Unmarshal(raw, &t)
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+			rawRows = append(rawRows, []interface{}{
+				t.StationGroupUID, -1, t.StationGroupID, t.StationGroupName.Zhtw, "", city, "", api, raw,
 			})
 		}
 	}

@@ -8,6 +8,7 @@ service Bus_Route_Service{
 }
 service Bus_Station_Service{
   rpc eta(Bus_Ask_Route) returns (stream Resp_Bus_eta) {}
+  rpc group(Bus_Ask_Route) returns (Bus_StationGroup) {}
 }
 message Bus_Ask_Route {
   string SubRouteUID = 1;
@@ -82,6 +83,21 @@ message Station{
   string city = 3;
   double PositionLon = 4;
   double PositionLat = 5;
+}
+message Bus_StationGroup{
+  string group_uid = 1;
+  string group_name = 2;
+  string city = 3;
+  double position_lon = 4;
+  double position_lat = 5;
+  repeated Bus_StationGroupMember members = 6;
+}
+message Bus_StationGroupMember{
+  string station_uid = 1;
+  string station_id = 2;
+  string station_name = 3;
+  double position_lon = 4;
+  double position_lat = 5;
 }
 
 message Bus_RouteArrival{

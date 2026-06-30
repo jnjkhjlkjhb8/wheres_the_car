@@ -95,6 +95,7 @@ type BusRouteserver struct {
 type BusStationserver struct {
 	pb.UnimplementedBus_Station_ServiceServer
 	mu sync.Mutex
+	db *pgxpool.Pool
 	rc *redis.Client
 }
 type BikeServer struct {
@@ -271,7 +272,7 @@ func main() {
 	}
 	grpcServer := grpc.NewServer(serverOptions...)
 	pb.RegisterBus_Route_ServiceServer(grpcServer, &BusRouteserver{db: db, rc: rc, cache: newTTLCache()})
-	pb.RegisterBus_Station_ServiceServer(grpcServer, &BusStationserver{rc: rc})
+	pb.RegisterBus_Station_ServiceServer(grpcServer, &BusStationserver{db: db, rc: rc})
 	pb.RegisterBike_ServiceServer(grpcServer, &BikeServer{db: db, rc: rc, cache: newTTLCache()})
 	pb.RegisterMrt_ServiceServer(grpcServer, &MrtServer{db: db, rc: rc})
 	pb.RegisterThsrTimetableServiceServer(grpcServer, &ThsrServer{db: db, client: c, rc: rc})
@@ -338,16 +339,39 @@ func (s *BusRouteserver) Fare(ctx context.Context, in *pb.Bus_Ask_Route) (*pb.Bu
 }
 
 func (s *BusStationserver) Eta(in *pb.Bus_Ask_Route, stream pb.Bus_Station_Service_EtaServer) error {
-	city := ""
-	stationName := in.SubRouteUID
-	if parts := strings.SplitN(in.SubRouteUID, ":", 2); len(parts) == 2 {
-		city = parts[0]
-		stationName = parts[1]
+	return (&BusRouteserver{db: s.db, rc: s.rc}).BusStationEta(in, stream)
+}
+
+func (s *BusStationserver) Group(ctx context.Context, in *pb.Bus_Ask_Route) (*pb.Bus_StationGroup, error) {
+	groupUID := in.SubRouteUID
+	if groupUID == "" {
+		return nil, status.Error(codes.InvalidArgument, "group_uid required")
 	}
-	return (&BusRouteserver{rc: s.rc}).BusStationEta(&pb.Bus_Ask_Station{
-		StationName: stationName,
-		City:        city,
-	}, stream)
+	resp := &pb.Bus_StationGroup{GroupUid: groupUID}
+	err := s.db.QueryRow(ctx, `
+		SELECT group_name, city, ST_X(position), ST_Y(position)
+		FROM bus_station_groups
+		WHERE group_uid = $1`, groupUID).Scan(&resp.GroupName, &resp.City, &resp.PositionLon, &resp.PositionLat)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "station group not found: %s", groupUID)
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT station_uid, station_id, station_name, ST_X(position), ST_Y(position)
+		FROM bus_station_group_members
+		WHERE group_uid = $1
+		ORDER BY station_id, station_uid`, groupUID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "station group members: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		m := &pb.Bus_StationGroupMember{}
+		if err := rows.Scan(&m.StationUid, &m.StationId, &m.StationName, &m.PositionLon, &m.PositionLat); err != nil {
+			return nil, status.Errorf(codes.Internal, "scan station group member: %v", err)
+		}
+		resp.Members = append(resp.Members, m)
+	}
+	return resp, nil
 }
 
 func (s *BikeServer) Static(ctx context.Context, in *pb.BikeRequest) (*pb.BikeStatic, error) {
@@ -569,10 +593,27 @@ func (s *BusRouteserver) BusRouteEta(in *pb.Bus_Ask_Route, stream pb.Bus_Route_S
 		}
 	}
 }
-func (s *BusRouteserver) BusStationEta(in *pb.Bus_Ask_Station, stream pb.Bus_Station_Service_EtaServer) error {
-	log.Printf("call Bus_station_eta %s", in.StationName)
-	sub := s.rc.Subscribe(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName))
-	if val, err := s.rc.Get(fmt.Sprintf("bus_eta_station:%s:%s", in.City, in.StationName)).Bytes(); err == nil && usableBusEtaPayload(val) {
+func (s *BusRouteserver) BusStationEta(in *pb.Bus_Ask_Route, stream pb.Bus_Station_Service_EtaServer) error {
+	log.Printf("call Bus_station_eta %s", in.SubRouteUID)
+	city, groupUID, ok := strings.Cut(in.SubRouteUID, ":")
+	if !ok {
+		groupUID = in.SubRouteUID
+	}
+	if groupUID == "" {
+		return status.Error(codes.InvalidArgument, "station eta key must include group_uid")
+	}
+	if s.db != nil {
+		var dbCity string
+		if err := s.db.QueryRow(stream.Context(), `SELECT city FROM bus_station_groups WHERE group_uid = $1`, groupUID).Scan(&dbCity); err == nil {
+			city = dbCity
+		}
+	}
+	if city == "" {
+		return status.Error(codes.InvalidArgument, "station eta key must include city or known group_uid")
+	}
+	key := fmt.Sprintf("bus_eta_station:%s:%s", city, groupUID)
+	sub := s.rc.Subscribe(key)
+	if val, err := s.rc.Get(key).Bytes(); err == nil && usableBusEtaPayload(val) {
 		resp := &pb.Resp_BusEta{Data: val}
 		if err := stream.Send(resp); err != nil {
 			log.Printf("[gRPC] action=bus_station_eta event=send_failed error=%v", err)

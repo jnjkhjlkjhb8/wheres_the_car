@@ -150,25 +150,27 @@ func mergeSearchResults(limit int, groups ...[]searchResult) []searchResult {
 }
 
 func expandStationRoutes(ctx context.Context, primary []searchResult, db *pgxpool.Pool) []searchResult {
-	var stationNames []string
+	var groupUIDs []string
 	seen := make(map[string]bool)
 	for _, r := range primary {
 		seen[searchResultKey(r)] = true
 		if r.Type == "bus_station" {
-			stationNames = append(stationNames, r.Name)
+			groupUIDs = append(groupUIDs, r.UID)
 		}
 	}
-	if len(stationNames) == 0 {
+	if len(groupUIDs) == 0 {
 		return primary
 	}
 	rows, err := db.Query(ctx, `
 		SELECT sv.type, sv.uid, sv.name, sv.city, sv.depart, sv.destin,
 		       ST_Y(sv.geom), ST_X(sv.geom)
-		FROM bus_station_stop_map bssm
+		FROM bus_station_group_members bsgm
+		JOIN bus_station_stop_map bssm
+		  ON bssm.station_id = bsgm.station_uid
 		JOIN search_vector sv
 		  ON sv.uid = bssm.sub_route_uid AND sv.type = 'bus_route'
-		WHERE bssm.station_name = ANY($1)`,
-		stationNames,
+		WHERE bsgm.group_uid = ANY($1)`,
+		groupUIDs,
 	)
 	if err != nil {
 		log.Printf("[SEARCH] route expansion error: %v", err)

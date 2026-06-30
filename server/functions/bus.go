@@ -237,6 +237,8 @@ type rawBusPosition struct {
 type busStationmap struct {
 	StationUID   string
 	StationName  string
+	GroupUID     string
+	GroupName    string
 	SubRouteUID  string
 	SubRouteName string
 	Direction    uint8
@@ -269,15 +271,28 @@ type rawBusShape struct {
 }
 
 type rawBusStation struct {
-	StationUID  string `json:"StationUID"`
-	StationID   string `json:"StationID"`
-	StationName struct {
+	StationUID     string `json:"StationUID"`
+	StationID      string `json:"StationID"`
+	StationGroupID string `json:"StationGroupID"`
+	StationName    struct {
 		Zhtw string `json:"Zh_tw"`
 	} `json:"StationName"`
 	StationPosition struct {
 		PositionLon float64 `json:"PositionLon"`
 		PositionLat float64 `json:"PositionLat"`
 	} `json:"StationPosition"`
+}
+
+type rawBusStationGroup struct {
+	StationGroupUID  string `json:"StationGroupUID"`
+	StationGroupID   string `json:"StationGroupID"`
+	StationGroupName struct {
+		Zhtw string `json:"Zh_tw"`
+	} `json:"StationGroupName"`
+	StationGroupPosition struct {
+		PositionLon float64 `json:"PositionLon"`
+		PositionLat float64 `json:"PositionLat"`
+	} `json:"StationGroupPosition"`
 }
 
 type rawBusOperator struct {
@@ -452,8 +467,10 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			}
 		})
 		processStatic(ctx, c, rc, db, city, "Station", func(raw []byte) {})
+		processStatic(ctx, c, rc, db, city, "StationGroup", func(raw []byte) {})
 		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
+		saveStationGroups(ctx, db, city, syncStart)
 		saveschedule(ctx, db, city)
 		if _, delErr := db.Exec(ctx, `DELETE FROM bus_station_stop_map WHERE sub_route_uid LIKE $1`, citymap[city]+"%"); delErr != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=delete_stop_map_error error=%v", city, delErr)
@@ -567,6 +584,128 @@ func savestations(ctx context.Context, db *pgxpool.Pool, city string) {
 		log.Printf("[BUS] action=savestations city=%s event=complete", city)
 	}
 }
+
+func saveStationGroups(ctx context.Context, db *pgxpool.Pool, city string, syncStart time.Time) {
+	c1 := `
+		INSERT INTO bus_station_groups (
+			group_uid,
+			group_id,
+			group_name,
+			city,
+			position,
+			source,
+			updated_at
+		)
+		SELECT
+			content->>'StationGroupUID',
+			content->>'StationGroupID',
+			content->'StationGroupName'->>'Zh_tw',
+			$1,
+			ST_SetSRID(ST_MakePoint(
+				(content->'StationGroupPosition'->>'PositionLon')::float,
+				(content->'StationGroupPosition'->>'PositionLat')::float
+			), 4326),
+			'tdx',
+			NOW()
+		FROM raw_bus_route
+		WHERE type = 'StationGroup'
+		  AND depart = $1
+		  AND content->>'StationGroupUID' <> ''
+		ON CONFLICT (group_uid) DO UPDATE SET
+			group_id = EXCLUDED.group_id,
+			group_name = EXCLUDED.group_name,
+			city = EXCLUDED.city,
+			position = EXCLUDED.position,
+			source = EXCLUDED.source,
+			updated_at = NOW();`
+	c2 := `
+		INSERT INTO bus_station_groups (
+			group_uid,
+			group_id,
+			group_name,
+			city,
+			position,
+			source,
+			updated_at
+		)
+		SELECT
+			$1 || ':manual:' || md5(content->'StationName'->>'Zh_tw'),
+			$1 || ':manual:' || md5(content->'StationName'->>'Zh_tw'),
+			content->'StationName'->>'Zh_tw',
+			$1,
+			ST_Centroid(ST_Collect(ST_SetSRID(ST_MakePoint(
+				(content->'StationPosition'->>'PositionLon')::float,
+				(content->'StationPosition'->>'PositionLat')::float
+			), 4326))),
+			'manual_name',
+			NOW()
+		FROM raw_bus_route s
+		WHERE s.type = 'Station'
+		  AND s.depart = $1
+		  AND NOT EXISTS (
+		  	SELECT 1
+		  	FROM bus_station_groups g
+		  	WHERE g.city = $1
+		  	  AND g.group_id = s.content->>'StationGroupID'
+		  )
+		GROUP BY content->'StationName'->>'Zh_tw'
+		ON CONFLICT (group_uid) DO UPDATE SET
+			group_name = EXCLUDED.group_name,
+			city = EXCLUDED.city,
+			position = EXCLUDED.position,
+			source = EXCLUDED.source,
+			updated_at = NOW();`
+	c3 := `
+		INSERT INTO bus_station_group_members (
+			station_uid,
+			group_uid,
+			station_id,
+			station_name,
+			city,
+			position,
+			updated_at
+		)
+		SELECT
+			s.content->>'StationUID',
+			COALESCE(g.group_uid, $1 || ':manual:' || md5(s.content->'StationName'->>'Zh_tw')),
+			s.content->>'StationID',
+			s.content->'StationName'->>'Zh_tw',
+			$1,
+			ST_SetSRID(ST_MakePoint(
+				(s.content->'StationPosition'->>'PositionLon')::float,
+				(s.content->'StationPosition'->>'PositionLat')::float
+			), 4326),
+			NOW()
+		FROM raw_bus_route s
+		LEFT JOIN bus_station_groups g
+		  ON g.city = $1
+		 AND g.group_id = s.content->>'StationGroupID'
+		WHERE s.type = 'Station'
+		  AND s.depart = $1
+		ON CONFLICT (station_uid) DO UPDATE SET
+			group_uid = EXCLUDED.group_uid,
+			station_id = EXCLUDED.station_id,
+			station_name = EXCLUDED.station_name,
+			city = EXCLUDED.city,
+			position = EXCLUDED.position,
+			updated_at = NOW();`
+	if _, err := db.Exec(ctx, c1, city); err != nil {
+		log.Printf("[BUS] action=saveStationGroups city=%s event=insert_tdx_groups_error error=%v", city, err)
+	}
+	if _, err := db.Exec(ctx, c2, city); err != nil {
+		log.Printf("[BUS] action=saveStationGroups city=%s event=insert_manual_groups_error error=%v", city, err)
+	}
+	if _, err := db.Exec(ctx, c3, city); err != nil {
+		log.Printf("[BUS] action=saveStationGroups city=%s event=insert_members_error error=%v", city, err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM bus_station_group_members WHERE city = $1 AND updated_at < $2`, city, syncStart); err != nil {
+		log.Printf("[BUS] action=saveStationGroups city=%s event=delete_stale_members_error error=%v", city, err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM bus_station_groups WHERE city = $1 AND updated_at < $2`, city, syncStart); err != nil {
+		log.Printf("[BUS] action=saveStationGroups city=%s event=delete_stale_groups_error error=%v", city, err)
+	}
+}
+
 func saveschedule(ctx context.Context, db *pgxpool.Pool, city string) {
 	syncStart := time.Now()
 	rows, err := db.Query(ctx, `SELECT content FROM raw_bus_route WHERE type = 'Schedule' AND destin = $1`, city)
@@ -965,19 +1104,27 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 				},
 			)
 		}
-		if _, ok = stations[b.StationName]; !ok {
-			stations[b.StationName] = &models.Bus_StationArrival{
-				StationName: b.StationName,
+		groupUID := b.GroupUID
+		if groupUID == "" {
+			groupUID = b.StationUID
+		}
+		groupName := b.GroupName
+		if groupName == "" {
+			groupName = b.StationName
+		}
+		if _, ok = stations[groupUID]; !ok {
+			stations[groupUID] = &models.Bus_StationArrival{
+				StationName: groupName,
 				StationUid:  make([]string, 0),
 				Routes:      make([]*models.Bus_StopEstimate, 0),
 			}
 		}
-		station := stations[b.StationName]
+		station := stations[groupUID]
 		if !slices.Contains(station.StationUid, b.StationUID) {
 			station.StationUid = append(station.StationUid, b.StationUID)
 		}
 		station.Routes = append(station.Routes, &models.Bus_StopEstimate{
-			StopUid:       b.StopUID,
+			StopUid:       b.StationUID,
 			SubRouteUid:   b.SubRouteUID,
 			RouteName:     b.SubRouteName,
 			Direction:     int32(b.Direction),
@@ -1008,9 +1155,11 @@ func processBusEtaCity(ctx context.Context, client *resty.Client, rc *redis.Clie
 		})
 	}
 	pipe := rc.Pipeline()
-	for name, pb := range stations {
+	for groupUID, pb := range stations {
 		data, _ := proto.Marshal(pb)
-		pipe.Set(fmt.Sprintf("bus_eta_station:%s:%s", city, name), data, 180*time.Second)
+		key := fmt.Sprintf("bus_eta_station:%s:%s", city, groupUID)
+		pipe.Set(key, data, 180*time.Second)
+		pipe.Publish(key, data)
 	}
 	for uid, pb := range routes {
 		data, _ := proto.Marshal(pb)
