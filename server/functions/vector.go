@@ -93,24 +93,51 @@ func mrtSystemName(code string) string {
 
 const size = 1024
 
-const busSubroutesForVectorSQL = `
+var (
+	busSubroutesForVectorSQL = `
 	SELECT bs.sub_route_uid, bs.sub_route_name, bs.city, bs.depart, bs.destin
 	FROM bus_static bs
-	WHERE bs.updated_at >= $1
+	WHERE bs.updated_at >= $1` + freshVectorSkipSQL("bus_route", "bs.sub_route_uid", "bs.updated_at") + `;`
+	busStationsForVectorSQL = `
+	SELECT DISTINCT ON (bs.station_name) bs.station_uid, bs.station_name, bs.city, ST_AsText(bs.position)
+	FROM bus_stations bs
+	WHERE bs.updated_at >= $1` + freshVectorSkipSQL("bus_station", "bs.station_uid", "bs.updated_at") + `;`
+	bikeStationsForVectorSQL = `
+	SELECT bs.station_uid, bs.name, bs.city, ST_AsText(bs.geom)
+	FROM bike_stations bs
+	WHERE bs.updated_at >= $1` + freshVectorSkipSQL("bike_station", "bs.station_uid", "bs.updated_at") + `;`
+	mrtStationsForVectorSQL = `
+	SELECT ms.station_id, ms.name, ms.system, ST_AsText(ms.stationposition)
+	FROM mrt_station ms
+	WHERE ms.updated_at >= $1` + freshVectorSkipSQL("mrt_station", "ms.station_id", "ms.updated_at") + `;`
+	thsrStationsForVectorSQL = `
+	SELECT ts.station_id, ts.name, ts.city, ST_AsText(ts.geom)
+	FROM thsr_stations ts
+	WHERE ts.updated_at >= $1` + freshVectorSkipSQL("thsr_station", "ts.station_id", "ts.updated_at") + `;`
+	traStationsForVectorSQL = `
+	SELECT ts.station_id, ts.name, ts.city, ST_AsText(ts.geom)
+	FROM tra_stations ts
+	WHERE ts.updated_at >= $1` + freshVectorSkipSQL("tra_station", "ts.station_id", "ts.updated_at") + `;`
+)
+
+func freshVectorSkipSQL(vectorType, uidExpr, updatedAtExpr string) string {
+	return fmt.Sprintf(`
 	  AND NOT EXISTS (
 	  	SELECT 1
 	  	FROM search_vector sv
-	  	WHERE sv.type = 'bus_route'
-	  	  AND sv.uid = bs.sub_route_uid
-	  	  AND sv.updated_at >= bs.updated_at
-	  );`
+	  	WHERE sv.type = '%s'
+	  	  AND sv.uid = %s
+	  	  AND sv.embedding IS NOT NULL
+	  	  AND sv.updated_at >= %s
+	  )`, vectorType, uidExpr, updatedAtExpr)
+}
 
 func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 	since, _ := rc.Get("LastTimeUpdate").Result()
 	if since == "" {
 		since = time.Time{}.Format(time.RFC3339)
 	}
-	tables := []string{"bus_subroutes", "bus_stations", "bike_stations", "mrt_station", "tra_stations", "thsr_stations", "tra_trains", "thsr_trains"}
+	tables := []string{"bus_subroutes", "bus_stations", "bike_stations", "mrt_station", "tra_stations", "thsr_stations"}
 	processBatch := func(table string, input []string, inrow []resp) bool {
 		if len(input) == 0 {
 			return true
@@ -156,7 +183,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 		log.Printf("[vector] action=vector event=success table=%s count=%d", table, len(resp))
 		return true
 	}
+	failed := false
 	for _, table := range tables {
+		if failed {
+			break
+		}
 		func() {
 			switch table {
 			case "bus_subroutes":
@@ -176,6 +207,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "bus_route", UID: uid, Name: name, City: cn, DepartSystem: depart, Destin: destin})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -183,10 +215,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			case "bus_stations":
-				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (station_name) station_uid, station_name, city, ST_AsText(position) FROM bus_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, busStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
@@ -202,6 +235,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "bus_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -209,10 +243,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			case "bike_stations":
-				rows, _ := db.Query(ctx, `SELECT station_uid, name, city, ST_AsText(geom) FROM bike_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, bikeStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
@@ -228,6 +263,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "bike_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -235,10 +271,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			case "mrt_station":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, system, ST_AsText(stationposition) FROM mrt_station WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, mrtStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
@@ -254,6 +291,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "mrt_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -261,10 +299,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			case "thsr_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM thsr_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, thsrStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
@@ -280,6 +319,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "thsr_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -287,10 +327,11 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			case "tra_stations":
-				rows, _ := db.Query(ctx, `SELECT station_id, name, city, ST_AsText(geom) FROM tra_stations WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, traStationsForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
@@ -306,6 +347,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					inrow = append(inrow, resp{Type: "tra_station", UID: uid, Name: name, City: cn, Geom: geom})
 					if len(input) >= size {
 						if !processBatch(table, input, inrow) {
+							failed = true
 							return
 						}
 						input = input[:0]
@@ -313,60 +355,15 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 					}
 				}
 				if !processBatch(table, input, inrow) {
-					return
-				}
-			case "tra_trains":
-				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (trainno) trainno, train_type_name, starting_station_name, ending_station_name FROM tra_timetable WHERE train_date >= CURRENT_DATE AND updated_at >= $1 ORDER BY trainno, train_date;`, since)
-				defer rows.Close()
-				input := make([]string, 0, size)
-				inrow := make([]resp, 0, size)
-				for rows.Next() {
-					var trainno, typeName, depart, destin string
-					if err := rows.Scan(&trainno, &typeName, &depart, &destin); err != nil {
-						log.Printf("[vector] action=vector event=scan_error error=%v", err)
-						continue
-					}
-					text := fmt.Sprintf("類型：台鐵車次 車次：%s 車種：%s 起站：%s 終站：%s", trainno, typeName, depart, destin)
-					input = append(input, text)
-					inrow = append(inrow, resp{Type: "tra_train", UID: trainno, Name: trainno, City: typeName, DepartSystem: depart, Destin: destin})
-					if len(input) >= size {
-						if !processBatch(table, input, inrow) {
-							return
-						}
-						input = input[:0]
-						inrow = inrow[:0]
-					}
-				}
-				if !processBatch(table, input, inrow) {
-					return
-				}
-			case "thsr_trains":
-				rows, _ := db.Query(ctx, `SELECT DISTINCT ON (trainno) trainno, starting_station_name, ending_station_name FROM thsr_timetable WHERE train_date >= CURRENT_DATE AND updated_at >= $1 ORDER BY trainno, train_date;`, since)
-				defer rows.Close()
-				input := make([]string, 0, size)
-				inrow := make([]resp, 0, size)
-				for rows.Next() {
-					var trainno, depart, destin string
-					if err := rows.Scan(&trainno, &depart, &destin); err != nil {
-						log.Printf("[vector] action=vector event=scan_error error=%v", err)
-						continue
-					}
-					text := fmt.Sprintf("類型：高鐵車次 車次：%s 起站：%s 終站：%s", trainno, depart, destin)
-					input = append(input, text)
-					inrow = append(inrow, resp{Type: "thsr_train", UID: trainno, Name: trainno, City: "高鐵", DepartSystem: depart, Destin: destin})
-					if len(input) >= size {
-						if !processBatch(table, input, inrow) {
-							return
-						}
-						input = input[:0]
-						inrow = inrow[:0]
-					}
-				}
-				if !processBatch(table, input, inrow) {
+					failed = true
 					return
 				}
 			}
 		}()
+	}
+	if failed {
+		log.Printf("[vector] action=vector event=incomplete last_time_update=unchanged")
+		return
 	}
 	rc.Set("LastTimeUpdate", time.Now().Format(time.RFC3339), 0)
 	log.Printf("[vector] action=vector event=complete")
