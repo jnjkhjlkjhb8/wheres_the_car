@@ -54,7 +54,8 @@ const busSubroutesUpsertSQL = `
 				destin,
 				geometry,
 				stops,
-				schedule
+				schedule,
+				operators
 			)
 			SELECT DISTINCT ON (uid, d) uid, rid, d, name1, name2,city,depart,destin,geom,
 				   ARRAY(
@@ -66,11 +67,11 @@ const busSubroutesUpsertSQL = `
 								  (s ->> 'PositionLat')::float
 							  )::stop
 					   FROM jsonb_array_elements(rawstop) AS s
-				   ),schedule
+				   ),schedule,operators
 			FROM temp_bus
 			ORDER BY uid, d
 			ON CONFLICT (sub_route_uid, direction)
-			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule,updated_at = NOW();
+			DO UPDATE SET city = excluded.city,geometry = EXCLUDED.geometry,stops = EXCLUDED.stops,depart = EXCLUDED.depart,destin = EXCLUDED.destin,schedule = EXCLUDED.schedule,operators = EXCLUDED.operators,updated_at = NOW();
 			`
 
 const busScheduleUpsertSQL = `INSERT INTO bus_schedule (sub_route_uid, direction, type, tripid, islowfloor, stopsequence, "stop_uid/MinHeadwayMins", "stop_name/MaxHeadwayMins", "arrival_time/StartTime", "departure_time/EndTime", service_day, updated_at)
@@ -96,7 +97,10 @@ type rawBusRoute struct {
 	} `json:"RouteName"`
 	DepartureStopNameZh   string `json:"DepartureStopNameZh"`
 	DestinationStopNameZh string `json:"DestinationStopNameZh"`
-	SubRoutes             []struct {
+	Operators             []struct {
+		OperatorID string `json:"OperatorID"`
+	} `json:"Operators"`
+	SubRoutes []struct {
 		SubRouteUID  string `json:"SubRouteUID"`
 		SubRouteID   string `json:"SubRouteID"`
 		SubRouteName struct {
@@ -276,6 +280,23 @@ type rawBusStation struct {
 	} `json:"StationPosition"`
 }
 
+type rawBusOperator struct {
+	OperatorID   string `json:"OperatorID"`
+	OperatorName struct {
+		Zhtw string `json:"Zh_tw"`
+	} `json:"OperatorName"`
+	OperatorPhone string `json:"OperatorPhone"`
+	OperatorUrl   string `json:"OperatorUrl"`
+	AuthorityCode string `json:"AuthorityCode"`
+}
+
+type busOperatorJSON struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Phone string `json:"phone"`
+	URL   string `json:"url"`
+}
+
 func busStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
 	dailyRoute(ctx, rc, client, db)
 	busDailyroute(client, rc)
@@ -288,6 +309,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			continue
 		}
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_start", city)
+		opMap := busOperators(ctx, c, rc, db, city)
 		subRoutemap := make(map[string]*models.BusSubroute)
 		routeMap := make(map[string][]string)
 		syncStart := time.Now()
@@ -300,6 +322,17 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
 				log.Printf("[BUS] action=dailyRoute city=%s api=Route event=unmarshal_error error=%v", city, err)
+			}
+			var ops []*models.BusOperator
+			for _, op := range r.Operators {
+				if detail, ok := opMap[op.OperatorID]; ok {
+					ops = append(ops, &models.BusOperator{
+						OperatorId:    detail.OperatorID,
+						OperatorName:  detail.OperatorName.Zhtw,
+						OperatorPhone: detail.OperatorPhone,
+						OperatorUrl:   detail.OperatorUrl,
+					})
+				}
 			}
 			for _, sub := range r.SubRoutes {
 				uid, dir := makethatsame(city, sub.SubRouteUID, sub.Direction)
@@ -323,6 +356,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 						DepartureStopName:   dep,
 						DestinationStopName: dest,
 						Directions:          make(map[int32]*models.Direction),
+						Operators:           ops,
 					}
 				}
 				subRoutemap[uid].Directions[int32(dir)] = &models.Direction{
@@ -448,6 +482,16 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 			if err != nil {
 				log.Printf("[BUS] action=changetodbformat event=marshal_error error=%v", err)
 			}
+			var opJSON []busOperatorJSON
+			for _, op := range sub.Operators {
+				opJSON = append(opJSON, busOperatorJSON{
+					ID:    op.OperatorId,
+					Name:  op.OperatorName,
+					Phone: op.OperatorPhone,
+					URL:   op.OperatorUrl,
+				})
+			}
+			operators, _ := json.Marshal(opJSON)
 			row = append(row, []interface{}{
 				sub.SubRouteUID,
 				sub.RouteUID,
@@ -460,6 +504,7 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 				d.Geometry,
 				stops,
 				schedules,
+				operators,
 			})
 		}
 	}
@@ -483,14 +528,15 @@ func changetodbformat(ctx context.Context, db *pgxpool.Pool, raw *map[string]*mo
 			destin text,
 			geom text,
     		rawstop jsonb,
-			schedule jsonb
+			schedule jsonb,
+			operators jsonb
                           ) ON COMMIT DROP
 		    `
 	c2 := busSubroutesUpsertSQL
 	if _, err := b.Exec(ctx, c1); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=create_temp_error error=%v", err)
 	}
-	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "city", "depart", "destin", "geom", "rawstop", "schedule"}, pgx.CopyFromRows(row)); err != nil {
+	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_bus"}, []string{"uid", "rid", "d", "name1", "name2", "city", "depart", "destin", "geom", "rawstop", "schedule", "operators"}, pgx.CopyFromRows(row)); err != nil {
 		log.Printf("[BUS] action=changetodbformat event=copyfrom_error error=%v row_count=%d", err, len(row))
 	}
 	if _, err := b.Exec(ctx, c2); err != nil {
@@ -1137,4 +1183,78 @@ func busFare(ctx context.Context, client *resty.Client, rc *redis.Client, db *pg
 		}()
 	}
 	log.Printf("[BUS_FARE] action=bus_fare event=complete")
+}
+
+func busOperators(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string) map[string]rawBusOperator {
+	result := make(map[string]rawBusOperator)
+	var url string
+	if city == "InterCity" {
+		url = "/v2/Bus/Operator/InterCity"
+	} else {
+		url = fmt.Sprintf("/v2/Bus/Operator/City/%s", city)
+	}
+	dec, comp, err, flipopen := callApi(client, rc, url, "bus_Operator"+city)
+	if err != nil || !comp {
+		rows, qErr := db.Query(ctx, `SELECT operator_id, operator_name, COALESCE(operator_phone,''), COALESCE(operator_url,''), authority_code FROM bus_operators WHERE authority_code = $1`, citymap[city])
+		if qErr != nil {
+			log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=db_fallback_error error=%v", city, qErr)
+			return result
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var op rawBusOperator
+			if err := rows.Scan(&op.OperatorID, &op.OperatorName.Zhtw, &op.OperatorPhone, &op.OperatorUrl, &op.AuthorityCode); err == nil {
+				result[op.OperatorID] = op
+			}
+		}
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=loaded_from_db count=%d", city, len(result))
+		return result
+	}
+	defer flipopen()
+	if _, err := dec.Token(); err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=decode_error error=%v", city, err)
+		return result
+	}
+	var copyRows [][]interface{}
+	for dec.More() {
+		var op rawBusOperator
+		if err := dec.Decode(&op); err != nil {
+			continue
+		}
+		result[op.OperatorID] = op
+		copyRows = append(copyRows, []interface{}{op.OperatorID, op.AuthorityCode, op.OperatorName.Zhtw, op.OperatorPhone, op.OperatorUrl})
+	}
+	if len(copyRows) == 0 {
+		return result
+	}
+	b, err := db.Begin(ctx)
+	if err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=begin_error error=%v", city, err)
+		return result
+	}
+	defer func() { _ = b.Rollback(ctx) }()
+	if _, err := b.Exec(ctx, `CREATE TEMP TABLE temp_op (oid text, ac text, name text, phone text, url text) ON COMMIT DROP`); err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=create_temp_error error=%v", city, err)
+		return result
+	}
+	if _, err := b.CopyFrom(ctx, pgx.Identifier{"temp_op"}, []string{"oid", "ac", "name", "phone", "url"}, pgx.CopyFromRows(copyRows)); err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=copyfrom_error error=%v", city, err)
+		return result
+	}
+	if _, err := b.Exec(ctx, `INSERT INTO bus_operators (operator_id, authority_code, operator_name, operator_phone, operator_url)
+		SELECT DISTINCT ON (oid, ac) oid, ac, name, phone, url FROM temp_op
+		ON CONFLICT (operator_id, authority_code) DO UPDATE SET
+			operator_name  = EXCLUDED.operator_name,
+			operator_phone = EXCLUDED.operator_phone,
+			operator_url   = EXCLUDED.operator_url,
+			updated_at     = NOW()`); err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=insert_error error=%v", city, err)
+		return result
+	}
+	if err := b.Commit(ctx); err != nil {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=commit_error error=%v", city, err)
+	} else {
+		log.Printf("[BUS_OPERATOR] action=busOperators city=%s event=complete count=%d", city, len(result))
+	}
+	return result
 }

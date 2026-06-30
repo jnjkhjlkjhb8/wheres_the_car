@@ -25,6 +25,12 @@ message Resp_Bus_eta{
 message Resp_Bus_daily_timetable{
   bytes data = 1;
 }
+message BusOperator {
+  string operator_id    = 1;
+  string operator_name  = 2;
+  string operator_phone = 3;
+  string operator_url   = 4;
+}
 message Bus_subroute{
   string RouteUID = 1;
   string RouteName = 2;
@@ -34,6 +40,7 @@ message Bus_subroute{
   string DestinationStopName = 6;
   string city = 7;
   map<int32,Direction> Directions = 8;
+  repeated BusOperator operators = 9;
 }
 
 message Direction{

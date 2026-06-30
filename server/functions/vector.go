@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -115,21 +116,15 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 		if len(input) == 0 {
 			return true
 		}
-		body, comp, err, flipopen := callOllama(input)
-		if err != nil || !comp {
-			log.Printf("[vector] action=vector event=skip reason=api_error,error=%s", err)
+		resp, err := embedBatch(input)
+		if err != nil {
+			log.Printf("[vector] action=vector event=skip reason=api_error error=%v", err)
 			return false
 		}
-		var result struct {
-			Embeddings [][]float32 `json:"embeddings"`
-		}
-		if err := json.Unmarshal(body, &result); err != nil {
-			log.Printf("[vector] action=vector event=unmarshal_error error=%v", err)
-			flipopen()
+		if len(resp) != len(inrow) {
+			log.Printf("[vector] action=vector event=skip reason=count_mismatch got=%d want=%d", len(resp), len(inrow))
 			return false
 		}
-		flipopen()
-		resp := result.Embeddings
 		b := &pgx.Batch{}
 		c1 := `INSERT INTO search_vector(
 					type, uid, name, city, depart, destin, geom, embedding, updated_at
@@ -380,20 +375,25 @@ func toVecLiteral(v []float32) string {
 	return "[" + strings.Join(parts, ",") + "]"
 }
 
-func callOllama(input []string) ([]byte, bool, error, func()) {
-	client := resty.New().SetHeader("Content-Type", "application/json")
-	resp, err := client.R().
-		SetBody(map[string]interface{}{
-			"model": "qwen3-embedding:0.6b",
-			"input": input,
-		}).
-		Post("http://ollama:11434/api/embed")
+func embedBatch(input []string) ([][]float32, error) {
+	model := os.Getenv("HF_EMBED_MODEL")
+	if model == "" {
+		model = "Qwen/Qwen3-Embedding-0.6B"
+	}
+	resp, err := resty.New().SetTimeout(5*time.Minute).R().
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Authorization", "Bearer "+os.Getenv("HF_TOKEN")).
+		SetBody(map[string]interface{}{"inputs": input}).
+		Post("https://router.huggingface.co/hf-inference/models/" + model + "/pipeline/feature-extraction")
 	if err != nil {
-		return nil, false, err, nil
+		return nil, err
 	}
-	return resp.Body(), true, nil, func() {
-		if err := resp.RawResponse.Body.Close(); err != nil {
-			log.Printf("[embed] action=fail-close-response error=%v", err)
-		}
+	if resp.StatusCode() != 200 {
+		return nil, fmt.Errorf("hf %d: %s", resp.StatusCode(), resp.Body())
 	}
+	var out [][]float32
+	if err := json.Unmarshal(resp.Body(), &out); err != nil {
+		return nil, fmt.Errorf("hf parse: %w (body=%s)", err, resp.Body())
+	}
+	return out, nil
 }

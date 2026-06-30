@@ -321,6 +321,7 @@ func fetchThsrTimetable(ctx context.Context, db *pgxpool.Pool, client *resty.Cli
 					temp.DailyTrainInfo.StartingStationName.ZhTw,
 					temp.DailyTrainInfo.EndingStationID,
 					temp.DailyTrainInfo.EndingStationName.ZhTw,
+					stop.StopSequence,
 					stop.StationID,
 					stop.StationName.ZhTw,
 					stop.ArrivalTime,

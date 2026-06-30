@@ -68,6 +68,9 @@ func mrtStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *
 	log.Printf("[MRT] action=mrt_static event=start")
 	getmrtStation(ctx, client, rc, db)
 	getmrtFirstlast(ctx, client, rc, db)
+	if err := mrtJourneyMatrix(ctx, db, client); err != nil {
+		log.Printf("[MRT] action=mrt_journey_matrix event=error error=%v", err)
+	}
 	log.Printf("[MRT] action=mrt_static event=complete")
 }
 func getmrtStation(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool) {
@@ -208,7 +211,7 @@ func getmrtFirstlast(ctx context.Context, client *resty.Client, rc *redis.Client
 						updated_at,
 						trip_head_sign
 					)
-					SELECT id,lid, dsid, dsname, ft, lt,mask,sys,NOW(),NOW(),sign FROM temp_mrt
+					SELECT DISTINCT ON (id, lid, dsid, mask, sys) id,lid, dsid, dsname, ft, lt,mask,sys,NOW(),NOW(),sign FROM temp_mrt
 					ON CONFLICT (station_id, lineid, destinationstaionid, serviceday, system)
 					DO UPDATE SET destinationstationname = EXCLUDED.destinationstationname,
 						firsttraintime = EXCLUDED.firsttraintime,
@@ -311,7 +314,7 @@ func mrtJourneyMatrix(ctx context.Context, pool *pgxpool.Pool, client *resty.Cli
 		_, err := client.R().
 			SetContext(ctx).
 			SetResult(&fares).
-			Get("/Rail/Metro/ODFare/" + system)
+			Get("/v2/Rail/Metro/ODFare/" + system)
 		if err != nil {
 			return fmt.Errorf("mrt ODFare %s: %w", system, err)
 		}
