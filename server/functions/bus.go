@@ -74,6 +74,12 @@ type rawBusFare struct {
 	FarePricingType uint8  `json:"FarePricingType"`
 	IsFreeBus       uint8  `json:"IsFreeBus"`
 	SectionFares    []struct {
+		SectionSequence uint8 `json:"SectionSequence"`
+		BufferZones     []struct {
+			StopUID      string `json:"StopUID"`
+			StopID       string `json:"StopID"`
+			StopSequence int32  `json:"StopSequence"`
+		} `json:"BufferZones"`
 		Fares []struct {
 			TicketType uint8 `json:"TicketType"`
 			FareClass  uint8 `json:"FareClass"`

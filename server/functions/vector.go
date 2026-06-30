@@ -93,6 +93,18 @@ func mrtSystemName(code string) string {
 
 const size = 1024
 
+const busSubroutesForVectorSQL = `
+	SELECT bs.sub_route_uid, bs.sub_route_name, bs.city, bs.depart, bs.destin
+	FROM bus_static bs
+	WHERE bs.updated_at >= $1
+	  AND NOT EXISTS (
+	  	SELECT 1
+	  	FROM search_vector sv
+	  	WHERE sv.type = 'bus_route'
+	  	  AND sv.uid = bs.sub_route_uid
+	  	  AND sv.updated_at >= bs.updated_at
+	  );`
+
 func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 	since, _ := rc.Get("LastTimeUpdate").Result()
 	if since == "" {
@@ -148,7 +160,7 @@ func changetovector(ctx context.Context, rc *redis.Client, db *pgxpool.Pool) {
 		func() {
 			switch table {
 			case "bus_subroutes":
-				rows, _ := db.Query(ctx, `SELECT sub_route_uid, sub_route_name,city,depart,destin FROM bus_static WHERE updated_at >= $1;`, since)
+				rows, _ := db.Query(ctx, busSubroutesForVectorSQL, since)
 				defer rows.Close()
 				input := make([]string, 0, size)
 				inrow := make([]resp, 0, size)
