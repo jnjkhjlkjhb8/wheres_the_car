@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jnjkhjlkjhb8/wheres_the_car/server/obs"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -99,26 +100,17 @@ func main() {
 		log.Println("[crontab] action=daily event=end")
 	})
 	_, _ = r.AddFunc("@every 2m", func() {
-		if sleepingwhiledailyupdate() {
-			return
-		}
 		log.Println("[crontab] action=tra event=start")
 		traEta(c, rc)
 		log.Println("[crontab] action=tra event=end")
 	})
 	_, _ = r.AddFunc("@every 30s", func() {
-		if sleepingwhiledailyupdate() {
-			return
-		}
 		log.Println("[crontab] action=bus&bike event=start")
 		bikeEta(c, rc)
 		busEta(context.Background(), c, rc, db, dispatcher)
 		log.Println("[crontab] action=bus&bike event=end")
 	})
 	_, _ = r.AddFunc("@every 10s", func() {
-		if sleepingwhiledailyupdate() {
-			return
-		}
 		log.Println("[crontab] action=mrt event=start")
 		mrtEta(c, rc)
 		log.Println("[crontab] action=mrt event=end")

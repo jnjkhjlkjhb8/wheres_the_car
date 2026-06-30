@@ -13,6 +13,7 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/pashagolub/pgxmock/v4 v4.9.0
+	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	google.golang.org/grpc v1.81.1
