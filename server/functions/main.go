@@ -588,7 +588,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 						ON CONFLICT (sub_route_uid,direction,type) DO UPDATE SET route_uid = EXCLUDED.route_uid,route_name = excluded.route_name,sub_route_name = EXCLUDED.sub_route_name,depart = excluded.depart,destin = excluded.destin,type = excluded.type,content = excluded.content,created_at = NOW();`
 		b, err := db.Begin(ctx)
 		if err != nil {
-			log.Printf("[MRT] action=process_static city=%s api= %s event=begin_error error=%v", city, api, err)
+			log.Printf("[BUS] action=process_static city=%s api= %s event=begin_error error=%v", city, api, err)
 			return
 		}
 		defer func(b pgx.Tx, ctx context.Context) {
@@ -612,7 +612,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 	}
 }
 
-const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR destin = $2)`
+const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR sub_route_uid like $2+%)`
 
 func hasBusRawStatic(ctx context.Context, db *pgxpool.Pool, city string, api string) bool {
 	var n int
