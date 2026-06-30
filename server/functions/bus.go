@@ -324,6 +324,10 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 			continue
 		}
 		log.Printf("[BUS] action=dailyRoute city=%s event=city_start", city)
+		forceAll := !busCityComplete(ctx, db, city)
+		if forceAll {
+			clearBusStaticCache(rc, city)
+		}
 		opMap := busOperators(ctx, c, rc, db, city)
 		subRoutemap := make(map[string]*models.BusSubroute)
 		routeMap := make(map[string][]string)
@@ -332,7 +336,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 		if err != nil {
 			log.Printf("[BUS] action=dailyRoute city=%s event=cleanup_error error=%v", city, err)
 		}
-		processStatic(ctx, c, rc, db, city, "Route", func(raw []byte) {
+		routeFetched := processStatic(ctx, c, rc, db, city, "Route", forceAll, func(raw []byte) {
 			var r rawBusRoute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -385,7 +389,12 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				routeMap[r.RouteUID] = append(routeMap[r.RouteUID], uid)
 			}
 		})
-		processStatic(ctx, c, rc, db, city, "StopOfRoute", func(raw []byte) {
+		if !routeFetched {
+			log.Printf("[BUS] action=dailyRoute city=%s event=city_skip reason=no_route_data force=%t", city, forceAll)
+			continue
+		}
+		clearBusStaticCache(rc, city)
+		processStatic(ctx, c, rc, db, city, "StopOfRoute", true, func(raw []byte) {
 			var r rawStopofroute
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -407,7 +416,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})
-		processStatic(ctx, c, rc, db, city, "Shape", func(raw []byte) {
+		processStatic(ctx, c, rc, db, city, "Shape", true, func(raw []byte) {
 			var r rawBusShape
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -430,7 +439,7 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})
-		processStatic(ctx, c, rc, db, city, "Schedule", func(raw []byte) {
+		processStatic(ctx, c, rc, db, city, "Schedule", true, func(raw []byte) {
 			var r rawBusSchedule
 			err := json.Unmarshal(raw, &r)
 			if err != nil {
@@ -466,8 +475,8 @@ func dailyRoute(ctx context.Context, rc *redis.Client, c *resty.Client, db *pgxp
 				}
 			}
 		})
-		processStatic(ctx, c, rc, db, city, "Station", func(raw []byte) {})
-		processStatic(ctx, c, rc, db, city, "StationGroup", func(raw []byte) {})
+		processStatic(ctx, c, rc, db, city, "Station", true, func(raw []byte) {})
+		processStatic(ctx, c, rc, db, city, "StationGroup", true, func(raw []byte) {})
 		changetodbformat(ctx, db, &subRoutemap)
 		savestations(ctx, db, city)
 		saveStationGroups(ctx, db, city, syncStart)

@@ -447,7 +447,7 @@ func getToken(rc *redis.Client) string {
 	}
 	return token
 }
-func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, processer func([]byte)) {
+func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, db *pgxpool.Pool, city string, api string, force bool, processer func([]byte)) bool {
 	var target string
 	if city == "InterCity" {
 		target = fmt.Sprintf("/v2/Bus/%s/InterCity", api)
@@ -456,20 +456,22 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 	}
 	log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=api_call", city, api)
 	cacheKey := "bus_" + api + city
-	dec, comp, err, flipopen := callApi(client, rc, target, cacheKey)
-	if err == nil && !comp && !hasBusRawStatic(ctx, db, city, api) {
+	if force {
 		_ = rc.Del("LastTimeGet_" + cacheKey).Err()
-		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=retry reason=local_empty", city, api)
-		dec, comp, err, flipopen = callApi(client, rc, target, cacheKey)
 	}
-	if err == nil && !comp {
-		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=skip reason=exist", city, api)
-		return
+	dec, comp, err, flipopen := callApi(client, rc, target, cacheKey)
+	if err != nil {
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=error error=%v", city, api, err)
+		return false
+	}
+	if !comp {
+		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=skip reason=not_modified", city, api)
+		return false
 	}
 	defer flipopen()
 	if _, err := dec.Token(); err != nil {
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=decode_error error=%v", city, api, err)
-		return
+		return false
 	}
 	var rawRows [][]interface{}
 	for dec.More() {
@@ -583,7 +585,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		b, err := db.Begin(ctx)
 		if err != nil {
 			log.Printf("[BUS] action=process_static city=%s api= %s event=begin_error error=%v", city, api, err)
-			return
+			return false
 		}
 		defer func(b pgx.Tx, ctx context.Context) {
 			_ = b.Rollback(ctx)
@@ -604,17 +606,29 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 			_ = b.Rollback(ctx)
 		}
 	}
+	return true
 }
 
-const busRawStaticExistsSQL = `SELECT COUNT(*) FROM raw_bus_route WHERE type = $1 AND (depart = $2 OR destin = $2 OR sub_route_uid LIKE $3)`
+// ponytail: "complete" = city has subroutes and none is missing stops. Empty
+// geometry/schedule isn't treated as incomplete (legitimately empty for some
+// routes); tighten the filter if those gaps ever need to trigger a refetch.
+const busCityCompleteSQL = `SELECT COUNT(*),
+	COUNT(*) FILTER (WHERE stops IS NULL OR cardinality(stops) = 0)
+	FROM bus_subroutes WHERE city = $1`
 
-func hasBusRawStatic(ctx context.Context, db *pgxpool.Pool, city string, api string) bool {
-	var n int
-	if err := db.QueryRow(ctx, busRawStaticExistsSQL, api, city, citymap[city]+"%").Scan(&n); err != nil {
-		log.Printf("[BUS_STATIC] action=raw_exists city=%s api=%s event=query_error error=%v", city, api, err)
+func busCityComplete(ctx context.Context, db *pgxpool.Pool, city string) bool {
+	var total, missing int
+	if err := db.QueryRow(ctx, busCityCompleteSQL, city).Scan(&total, &missing); err != nil {
+		log.Printf("[BUS_STATIC] action=city_complete city=%s event=query_error error=%v", city, err)
 		return true
 	}
-	return n > 0
+	return total > 0 && missing == 0
+}
+
+func clearBusStaticCache(rc *redis.Client, city string) {
+	for _, api := range []string{"Route", "StopOfRoute", "Shape", "Schedule", "Station", "StationGroup"} {
+		_ = rc.Del("LastTimeGet_bus_" + api + city).Err()
+	}
 }
 
 func mask(mon, tues, wed, thur, fri, satur, sun bool, nationalHoliday ...bool) uint8 {
