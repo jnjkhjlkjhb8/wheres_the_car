@@ -462,7 +462,7 @@ func processStatic(ctx context.Context, client *resty.Client, rc *redis.Client, 
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=retry reason=local_empty", city, api)
 		dec, comp, err, flipopen = callApi(client, rc, target, cacheKey)
 	}
-	if err == nil || !comp {
+	if err == nil && !comp {
 		log.Printf("[BUS_STATIC] action=process_static city=%s api=%s event=skip reason=exist", city, api)
 		return
 	}
